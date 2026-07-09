@@ -1,0 +1,20 @@
+= Семейная картотека
+:doctype: book
+:toc: left
+:toclevels: 3
+:sectnums:
+:icons: font
+
+include::01-rules/index.adoc[]
+
+include::02-register/index.adoc[]
+
+include::03-people/index.adoc[]
+
+include::04-groups/index.adoc[]
+
+include::05-places/index.adoc[]
+
+include::06-sources/index.adoc[]
+
+include::07-research/index.adoc[]

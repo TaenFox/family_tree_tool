@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Family Tree GUI</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="workspace">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <button class="sidebar-title" id="home-button" type="button">Картотека</button>
+          <button class="button button-secondary small" id="refresh-button" type="button">Обновить</button>
+        </div>
+
+        <div class="sidebar-toolbar">
+          <label class="search-field search-field-select">
+            <select id="card-filter-select" aria-label="Фильтр карточек">
+              <option value="person" selected>Люди</option>
+              <option value="all">Все карточки</option>
+              <option value="group">Группы</option>
+              <option value="place">Места</option>
+              <option value="source">Источники</option>
+              <option value="research">Исследования</option>
+            </select>
+          </label>
+          <label class="search-field">
+            <input id="search-input" type="search" placeholder="Поиск по номеру, имени, пути" />
+          </label>
+          <button class="button button-primary" id="new-card-button" type="button">Новая карточка</button>
+        </div>
+
+        <div class="sidebar-count" id="card-count">0 карточек</div>
+
+        <ul id="card-list" class="nav-list"></ul>
+      </aside>
+
+      <section class="editor">
+        <div class="editor-topbar">
+          <h2 id="mode-title">Новая запись</h2>
+          <div class="topbar-controls">
+            <button class="button button-primary" id="submit-button" type="submit" form="card-form">Сохранить</button>
+            <div class="segmented" role="tablist" aria-label="Режим просмотра карточки">
+              <button class="segmented-button is-active" data-editor-view="form" type="button">Форма</button>
+              <button class="segmented-button" data-editor-view="graph" type="button">Граф</button>
+            </div>
+          </div>
+        </div>
+
+        <section class="editor-panel" id="form-panel">
+          <form id="card-form" class="card-form">
+            <input type="hidden" name="cardType" value="person" />
+            <input type="hidden" name="editDirectory" value="" />
+            <input type="hidden" name="mainPhoto" value="" />
+
+            <section class="form-block form-block-hero">
+              <div class="hero-grid">
+                <div class="hero-main">
+                  <div class="form-row form-row-primary">
+                    <label class="field">
+                      <span>Номер карточки</span>
+                      <input name="cardNumber" placeholder="К-002" required />
+                    </label>
+                    <label class="field wide">
+                      <span id="primary-name-label">Имя при рождении</span>
+                      <input name="primaryName" placeholder="Имя Фамилия" required />
+                    </label>
+                  </div>
+
+                  <div class="hero-person-fields" data-type-section="person">
+                    <label class="field">
+                      <span>Дата рождения</span>
+                      <input name="birthDate" placeholder="12.03.1901" />
+                    </label>
+                    <label class="field">
+                      <span>Пол</span>
+                      <select name="sex">
+                        <option value="">...</option>
+                        <option value="мужской">Мужской</option>
+                        <option value="женский">Женский</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Место рождения</span>
+                      <div class="place-field-stack">
+                        <input name="birthPlace" type="hidden" />
+                        <div class="place-reference-slot" data-place-reference="birthPlace"></div>
+                        <div class="place-field-actions">
+                          <select class="picker-select is-empty place-inline-picker" id="birth-place-picker">
+                            <option value="">Выбери карточку места</option>
+                          </select>
+                        </div>
+                      </div>
+                    </label>
+                    <button class="toggle-link" id="death-toggle" type="button">Добавить сведения о смерти</button>
+                    <label class="field is-hidden" id="death-date-field">
+                      <span>Дата смерти</span>
+                      <input name="deathDate" placeholder="..." />
+                    </label>
+                    <label class="field is-hidden" id="death-place-field">
+                      <span>Место смерти</span>
+                      <div class="place-field-stack">
+                        <input name="deathPlace" type="hidden" />
+                        <div class="place-reference-slot" data-place-reference="deathPlace"></div>
+                        <div class="place-field-actions">
+                          <select class="picker-select is-empty place-inline-picker" id="death-place-picker">
+                            <option value="">Выбери карточку места</option>
+                          </select>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+
+                  <div class="hero-group-fields is-hidden" data-type-section="group">
+                    <label class="field">
+                      <span>Описание / причина группировки</span>
+                      <textarea
+                        name="groupDescription"
+                        rows="6"
+                        placeholder="Например: родительская семья, фото, совместный переезд"
+                      ></textarea>
+                    </label>
+                  </div>
+
+                  <div class="hero-place-fields is-hidden" data-type-section="place">
+                    <label class="field">
+                      <span>Тип места</span>
+                      <select name="placeType">
+                        <option value="">...</option>
+                        <option value="Населённый пункт">Населённый пункт</option>
+                        <option value="Учебное заведение">Учебное заведение</option>
+                        <option value="Место работы">Место работы</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div class="hero-source-fields is-hidden" data-type-section="source">
+                    <label class="field">
+                      <span>Тип источника</span>
+                      <select name="sourceType">
+                        <option value="">...</option>
+                        <option value="Документ">Документ</option>
+                        <option value="Фотография">Фотография</option>
+                        <option value="Ссылка">Ссылка</option>
+                        <option value="Устное свидетельство">Устное свидетельство</option>
+                        <option value="Архивная запись">Архивная запись</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span>Дата / период</span>
+                      <input name="sourceDate" placeholder="Например: 1897, 1914-1916, около 1920" />
+                    </label>
+                    <label class="field">
+                      <span>Откуда получен</span>
+                      <input name="sourceOrigin" placeholder="Семейный архив, сайт, архив, устный рассказ" />
+                    </label>
+                    <label class="field">
+                      <span>Где хранится</span>
+                      <input name="sourceStorage" placeholder="Папка, ссылка, владелец оригинала, архивный шифр" />
+                    </label>
+                  </div>
+
+                  <div class="hero-research-fields is-hidden" data-type-section="research">
+                    <label class="field">
+                      <span>Вопрос</span>
+                      <textarea
+                        name="researchQuestion"
+                        rows="5"
+                        placeholder="Что именно нужно выяснить"
+                      ></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Решение</span>
+                      <textarea
+                        name="researchSolution"
+                        rows="5"
+                        placeholder="Текущее понимание, вывод или дальнейшие шаги"
+                      ></textarea>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="hero-photos" data-type-section="person,group,place,source">
+                  <div class="photo-preview is-empty" id="photo-preview">
+                    <img id="photo-preview-image" alt="Предпросмотр фотографии" />
+                  </div>
+                  <div class="photo-upload">
+                    <input id="photo-file-input" type="file" accept="image/*" hidden multiple />
+                    <div class="photo-upload-actions">
+                      <button class="photo-dropzone" id="photo-dropzone" type="button">
+                        <span id="photo-dropzone-text">Перетащи фото сюда или нажми</span>
+                      </button>
+                      <button class="button button-secondary small" id="photo-paste-button" type="button">Из буфера</button>
+                    </div>
+                    <div class="photo-gallery" id="photo-gallery"></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="form-block" data-type-section="person">
+              <div class="block-header">
+                <h3>Связи</h3>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <div class="field-head">
+                    <span>Родители</span>
+                    <div class="relation-picker" data-picker-target="parents" data-picker-type="person"></div>
+                  </div>
+                  <input type="hidden" name="parents" />
+                  <div class="relation-list" data-relation-list="parents"></div>
+                </label>
+                <label class="field">
+                  <div class="field-head">
+                    <span>Братья / сестры</span>
+                    <div class="relation-picker" data-picker-target="siblings" data-picker-type="person"></div>
+                  </div>
+                  <input type="hidden" name="siblings" />
+                  <div class="relation-list" data-relation-list="siblings"></div>
+                </label>
+                <label class="field">
+                  <div class="field-head">
+                    <span>Дети</span>
+                    <div class="relation-picker" data-picker-target="children" data-picker-type="person"></div>
+                  </div>
+                  <input type="hidden" name="children" />
+                  <div class="relation-list" data-relation-list="children"></div>
+                </label>
+                <label class="field">
+                  <div class="field-head">
+                    <span>Партнёры</span>
+                    <div class="relation-picker" data-picker-target="partners" data-picker-type="person"></div>
+                  </div>
+                  <input type="hidden" name="partners" />
+                  <div class="relation-list" data-relation-list="partners"></div>
+                </label>
+                <label class="field">
+                  <div class="field-head">
+                    <span>Группы</span>
+                    <div class="relation-picker" data-picker-target="groups" data-picker-type="group"></div>
+                  </div>
+                  <input type="hidden" name="groups" />
+                  <div class="relation-list" data-relation-list="groups"></div>
+                </label>
+              </div>
+            </section>
+
+            <section class="form-block" data-type-section="person">
+              <div class="block-header">
+                <h3>Навигационный шифр</h3>
+                <div class="segmented" role="tablist" aria-label="Режим навигационного шифра">
+                  <button class="segmented-button is-active" data-nav-mode="read" type="button">Просмотр</button>
+                  <button class="segmented-button" data-nav-mode="edit" type="button">Составление</button>
+                </div>
+              </div>
+              <div class="nav-code-read" id="navigation-code-read"></div>
+              <div class="form-column is-hidden" id="navigation-code-compose">
+                <label class="field">
+                  <span>Опорная карточка</span>
+                  <select id="navigation-code-anchor" class="picker-select">
+                    <option value="">Выбери человека</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Шифр</span>
+                  <input name="navigationCode" id="navigation-code-input" placeholder="К-001-О-С01" />
+                </label>
+                <div class="nav-code-editor" id="navigation-code-editor"></div>
+                <div class="nav-code-actions">
+                  <button class="button button-secondary small" id="nav-code-add-segment" type="button">Добавить сегмент</button>
+                  <button class="button button-secondary small" id="nav-code-clear" type="button">Очистить</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="form-block is-hidden" data-type-section="group">
+              <div class="block-header">
+                <h3>Состав группы</h3>
+              </div>
+              <div class="form-column">
+                <label class="field">
+                  <div class="field-head">
+                    <span>Участники</span>
+                    <div class="relation-picker" data-picker-target="participants" data-picker-type="person"></div>
+                  </div>
+                  <input type="hidden" name="participants" />
+                  <div class="relation-list" data-relation-list="participants"></div>
+                </label>
+              </div>
+            </section>
+
+            <section class="form-block is-hidden" data-type-section="place">
+              <div class="block-header">
+                <h3>Переименования</h3>
+                <button class="button button-secondary small icon-button" id="add-rename-button" type="button" aria-label="Добавить переименование">+</button>
+              </div>
+              <input type="hidden" name="renameHistory" value="[]" />
+              <div class="facts-table" id="rename-table"></div>
+            </section>
+
+            <section class="form-block is-hidden" data-type-section="source">
+              <div class="block-header">
+                <h3>Связанные карточки</h3>
+              </div>
+              <div class="form-row">
+                <label class="field">
+                  <div class="field-head">
+                    <span>Люди</span>
+                    <div class="relation-picker" data-picker-target="sourcePeople" data-picker-type="person"></div>
+                  </div>
+                  <input type="hidden" name="sourcePeople" />
+                  <div class="relation-list" data-relation-list="sourcePeople"></div>
+                </label>
+                <label class="field">
+                  <div class="field-head">
+                    <span>Группы</span>
+                    <div class="relation-picker" data-picker-target="sourceGroups" data-picker-type="group"></div>
+                  </div>
+                  <input type="hidden" name="sourceGroups" />
+                  <div class="relation-list" data-relation-list="sourceGroups"></div>
+                </label>
+                <label class="field">
+                  <div class="field-head">
+                    <span>Места</span>
+                    <div class="relation-picker" data-picker-target="sourcePlaces" data-picker-type="place"></div>
+                  </div>
+                  <input type="hidden" name="sourcePlaces" />
+                  <div class="relation-list" data-relation-list="sourcePlaces"></div>
+                </label>
+              </div>
+            </section>
+
+            <section class="form-block is-hidden" data-type-section="source">
+              <div class="block-header">
+                <h3>Содержание</h3>
+              </div>
+              <div class="form-column">
+                <label class="field">
+                  <span>Краткое содержание</span>
+                  <textarea name="sourceSummary" rows="6" placeholder="Что это за источник и что в нём содержится"></textarea>
+                </label>
+                <label class="field">
+                  <span>Извлечённые факты</span>
+                  <textarea name="sourceExtracts" rows="8" placeholder="Ключевые факты, цитаты, наблюдения, что уже удалось извлечь"></textarea>
+                </label>
+              </div>
+            </section>
+
+            <section class="form-block" data-type-section="person,group">
+              <div class="block-header">
+                <h3>Исторические факты</h3>
+                <button class="button button-secondary small icon-button" id="add-fact-button" type="button" aria-label="Добавить факт">+</button>
+              </div>
+              <input type="hidden" name="facts" value="[]" />
+              <div class="facts-table" id="facts-table"></div>
+            </section>
+
+            <section class="form-block is-hidden" data-type-section="research">
+              <div class="block-header">
+                <h3>Дневник</h3>
+                <button class="button button-secondary small icon-button" id="add-research-entry-button" type="button" aria-label="Добавить запись дневника">+</button>
+              </div>
+              <input type="hidden" name="researchJournal" value="[]" />
+              <div class="facts-table" id="research-journal-table"></div>
+            </section>
+
+            <section class="form-block" data-type-section="person,group,place,source">
+              <div class="block-header">
+                <h3>Примечания</h3>
+                <div class="segmented" role="tablist" aria-label="Режим примечаний">
+                  <button class="segmented-button" data-notes-mode="editor" type="button">Редактор</button>
+                  <button class="segmented-button is-active" data-notes-mode="preview" type="button">Превью</button>
+                </div>
+              </div>
+              <div class="notes-toolbar is-hidden" id="notes-toolbar">
+                <button class="button button-secondary small icon-button" id="notes-bold" type="button" aria-label="Жирный текст"><strong>B</strong></button>
+                <button class="button button-secondary small icon-button" id="notes-italic" type="button" aria-label="Курсив"><em>I</em></button>
+                <button class="button button-secondary small icon-button" id="notes-list" type="button" aria-label="Маркированный список">•</button>
+                <button class="button button-secondary small icon-button" id="notes-link" type="button" aria-label="Ссылка">↗</button>
+                <div class="notes-photo-tools">
+                  <select id="notes-photo-select" class="picker-select is-empty">
+                    <option value="">Фото из каталога</option>
+                  </select>
+                  <button class="button button-secondary small" id="notes-photo-insert" type="button">Вставить</button>
+                </div>
+              </div>
+              <div class="notes-panel is-hidden" id="notes-editor-panel">
+                <label class="field">
+                  <textarea name="notes" id="notes-input" rows="10" placeholder="..." ></textarea>
+                </label>
+              </div>
+              <div class="notes-preview" id="notes-preview"></div>
+            </section>
+            <p id="status" class="status" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section class="editor-panel graph-panel is-hidden" id="graph-panel">
+          <div class="graph-canvas-wrap">
+            <div class="graph-empty" id="graph-empty">Граф доступен для сохранённых карточек.</div>
+            <div class="graph-canvas is-hidden" id="graph-canvas"></div>
+          </div>
+          <section class="graph-tool">
+            <div class="block-header">
+              <h3>Адресный шифр</h3>
+            </div>
+            <div class="graph-tool-row">
+              <label class="field">
+                <span>От карточки</span>
+                <select id="nav-code-from" class="picker-select">
+                  <option value="">Выбери человека</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>К карточке</span>
+                <select id="nav-code-to" class="picker-select">
+                  <option value="">Выбери человека</option>
+                </select>
+              </label>
+              <button class="button button-primary" id="nav-code-build" type="button">Построить</button>
+            </div>
+            <div class="graph-tool-results" id="nav-code-results">
+              <p class="graph-tool-hint">Шифр строится по текущим связям людей и не записывается в карточку.</p>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <div class="lightbox is-hidden" id="lightbox">
+      <button class="lightbox-close" id="lightbox-close" type="button">Закрыть</button>
+      <button class="lightbox-nav lightbox-prev" id="lightbox-prev" type="button">‹</button>
+      <div class="lightbox-stage">
+        <img id="lightbox-image" alt="Фотография" />
+        <p class="lightbox-caption" id="lightbox-caption"></p>
+      </div>
+      <button class="lightbox-nav lightbox-next" id="lightbox-next" type="button">›</button>
+    </div>
+
+    <dialog class="type-dialog" id="new-card-type-dialog">
+      <form method="dialog" class="type-dialog-card">
+        <div class="type-dialog-head">
+          <h3>Новая карточка</h3>
+          <button class="button button-secondary small" type="submit" value="cancel">Отмена</button>
+        </div>
+        <p class="type-dialog-text">Выбери тип карточки для создания.</p>
+        <div class="type-dialog-grid">
+          <button class="type-dialog-option" type="submit" value="person">
+            <span class="type-dialog-icon" aria-hidden="true">◉</span>
+            <span>Человек</span>
+          </button>
+          <button class="type-dialog-option" type="submit" value="group">
+            <span class="type-dialog-icon" aria-hidden="true">◎</span>
+            <span>Группа</span>
+          </button>
+          <button class="type-dialog-option" type="submit" value="place">
+            <span class="type-dialog-icon" aria-hidden="true">⌂</span>
+            <span>Место</span>
+          </button>
+          <button class="type-dialog-option" type="submit" value="source">
+            <span class="type-dialog-icon" aria-hidden="true">✦</span>
+            <span>Источник</span>
+          </button>
+          <button class="type-dialog-option" type="submit" value="research">
+            <span class="type-dialog-icon" aria-hidden="true">✎</span>
+            <span>Исследование</span>
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
