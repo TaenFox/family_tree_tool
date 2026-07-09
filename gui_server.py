@@ -2112,7 +2112,7 @@ def navigation_variants(source_directory: str, target_directory: str) -> dict[st
         source_number = records_index[source_directory].number
         return {
             "status": "resolved",
-            "variants": [{"code": source_number, "steps": 0}],
+            "variants": [{"code": source_number, "steps": 0, "cards": [navigation_card_payload(records_index[source_directory])]}],
             "message": "Опорная и целевая карточки совпадают.",
         }
 
@@ -2160,7 +2160,7 @@ def navigation_variants(source_directory: str, target_directory: str) -> dict[st
         return {
             "status": "unreachable",
             "variants": [],
-            "message": "Путь по текущим связям не найден.",
+            "message": "Маршрут по текущим связям не найден.",
         }
 
     source_number = records_index[source_directory].number
@@ -2206,13 +2206,15 @@ def navigation_variants(source_directory: str, target_directory: str) -> dict[st
             if code in seen_codes:
                 continue
             seen_codes.add(code)
-            variants.append({"code": code, "steps": len(path)})
+            route_cards = [navigation_card_payload(records_index[source_directory])]
+            route_cards.extend(navigation_card_payload(records_index[directory]) for directory, _ in path)
+            variants.append({"code": code, "steps": len(path), "cards": route_cards})
 
     variants.sort(key=lambda item: (item["steps"], item["code"]))
     return {
         "status": "resolved",
         "variants": variants[:24],
-        "message": "Найденные варианты построены по текущим связям карточек.",
+        "message": "Найденные маршруты построены по текущим связям карточек.",
     }
 
 

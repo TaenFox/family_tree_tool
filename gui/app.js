@@ -12,6 +12,7 @@ const modeTitle = document.querySelector("#mode-title");
 const submitButton = document.querySelector("#submit-button");
 const editorViewToggle = document.querySelector('[aria-label="Режим просмотра карточки"]');
 const newCardTypeDialog = document.querySelector("#new-card-type-dialog");
+const navLookupDialog = document.querySelector("#nav-lookup-dialog");
 const formPanel = document.querySelector("#form-panel");
 const graphPanel = document.querySelector("#graph-panel");
 const graphCanvas = document.querySelector("#graph-canvas");
@@ -27,6 +28,8 @@ const navCodeFromSelect = document.querySelector("#nav-code-from");
 const navCodeToSelect = document.querySelector("#nav-code-to");
 const navCodeBuildButton = document.querySelector("#nav-code-build");
 const navCodeResults = document.querySelector("#nav-code-results");
+const navLookupOpenButton = document.querySelector("#nav-lookup-open");
+const navLookupCloseButton = document.querySelector("#nav-lookup-close");
 const mainPhotoInput = form.elements.mainPhoto;
 const photoFileInput = document.querySelector("#photo-file-input");
 const photoDropzone = document.querySelector("#photo-dropzone");
@@ -721,26 +724,71 @@ function renderNavigationCodeOptions() {
   renderNavigationCodeAnchorOptions();
 }
 
-function resetNavigationCodeResult(message = "Шифр строится по текущим связям людей и не записывается в карточку.") {
+function closeNavigationLookupDialog() {
+  if (navLookupDialog?.open) {
+    navLookupDialog.close();
+  }
+}
+
+function openNavigationLookupDialog() {
+  if (!navLookupDialog || typeof navLookupDialog.showModal !== "function") {
+    setStatus("Этот браузер не поддерживает модальное окно поиска связи.", "error");
+    return;
+  }
+  renderNavigationCodeOptions();
+  resetNavigationCodeResult();
+  if (navLookupDialog.open) {
+    return;
+  }
+  navLookupDialog.showModal();
+  navCodeFromSelect.focus();
+}
+
+function resetNavigationCodeResult(message = "Маршрут строится по текущим связям людей и не записывается в карточку.") {
   navCodeResults.innerHTML = `<p class="graph-tool-hint">${escapeHtml(message)}</p>`;
+}
+
+function renderNavigationRoute(cards) {
+  if (!Array.isArray(cards) || !cards.length) {
+    return "";
+  }
+
+  return `
+    <div class="graph-route-list">
+      ${cards
+        .map(
+          (card, index) => `
+            ${index ? '<div class="graph-route-arrow">↓</div>' : ""}
+            <button class="graph-route-card is-button" type="button" data-open-nav-card="${escapeHtml(card.path)}">
+              <span class="graph-route-number">${escapeHtml(card.number || `Шаг ${index + 1}`)}</span>
+              <span class="graph-route-title">${escapeHtml(card.title || card.display_label || "...")}</span>
+            </button>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function renderNavigationCodeResult(payload) {
   if (payload.status !== "resolved" || !payload.variants?.length) {
-    navCodeResults.innerHTML = `<p class="graph-tool-empty">${escapeHtml(payload.message || "Варианты не найдены.")}</p>`;
+    navCodeResults.innerHTML = `<p class="graph-tool-empty">${escapeHtml(payload.message || "Маршрут не найден.")}</p>`;
     return;
   }
 
   navCodeResults.innerHTML = `
-    <p class="graph-tool-hint">${escapeHtml(payload.message || "Найденные варианты шифра.")}</p>
+    <p class="graph-tool-hint">${escapeHtml(payload.message || "Найденные маршруты.")}</p>
     <div class="graph-code-list">
       ${payload.variants
         .map(
           (item) => `
             <div class="graph-code-item">
-              <div>
-                <p class="graph-code-value">${escapeHtml(item.code)}</p>
-                <p class="graph-code-meta">${item.steps === 0 ? "Без переходов" : `Переходов: ${item.steps}`}</p>
+              <div class="graph-code-main">
+                <div>
+                  <p class="graph-code-value">${escapeHtml(item.code)}</p>
+                  <p class="graph-code-meta">${item.steps === 0 ? "Та же карточка" : `Переходов: ${item.steps}`}</p>
+                </div>
+                ${renderNavigationRoute(item.cards)}
               </div>
               <button class="button button-secondary small" type="button" data-copy-nav-code="${escapeHtml(item.code)}">Копировать</button>
             </div>
@@ -757,13 +805,13 @@ async function buildNavigationCode() {
     return;
   }
 
-  navCodeResults.innerHTML = '<p class="graph-tool-hint">Строю варианты шифра...</p>';
+  navCodeResults.innerHTML = '<p class="graph-tool-hint">Ищу маршрут между выбранными карточками...</p>';
   const response = await fetch(
     `/api/navigation-code?from=${encodeURIComponent(navCodeFromSelect.value)}&to=${encodeURIComponent(navCodeToSelect.value)}`,
   );
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error || "Не удалось построить адресный шифр.");
+    throw new Error(payload.error || "Не удалось построить маршрут между карточками.");
   }
   renderNavigationCodeResult(payload);
 }
@@ -2130,6 +2178,7 @@ function resetFormToCreateMode(type = "person") {
   editingState = null;
   graphState = null;
   preferredMainPhoto = "";
+  closeNavigationLookupDialog();
   form.reset();
   clearCardFields();
   setStatus("");
@@ -2914,6 +2963,26 @@ newCardButton.addEventListener("click", () => {
   openNewCardTypeDialog();
 });
 
+if (navLookupOpenButton) {
+  navLookupOpenButton.addEventListener("click", () => {
+    openNavigationLookupDialog();
+  });
+}
+
+if (navLookupCloseButton) {
+  navLookupCloseButton.addEventListener("click", () => {
+    closeNavigationLookupDialog();
+  });
+}
+
+if (navLookupDialog) {
+  navLookupDialog.addEventListener("click", (event) => {
+    if (event.target === navLookupDialog) {
+      closeNavigationLookupDialog();
+    }
+  });
+}
+
 if (newCardTypeDialog) {
   newCardTypeDialog.addEventListener("close", () => {
     const type = newCardTypeDialog.returnValue;
@@ -3542,6 +3611,7 @@ document.addEventListener("click", (event) => {
 
   const navigationTarget = event.target.closest("[data-open-nav-card]");
   if (navigationTarget) {
+    closeNavigationLookupDialog();
     startEditing(navigationTarget.dataset.openNavCard).catch((error) => setStatus(error.message, "error"));
     return;
   }
