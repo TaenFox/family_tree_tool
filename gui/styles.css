@@ -285,6 +285,23 @@ textarea {
   margin-top: 16px;
 }
 
+.nav-lookup-dialog-card {
+  width: min(860px, calc(100vw - 24px));
+  display: grid;
+  gap: 14px;
+}
+
+.nav-lookup-head {
+  align-items: flex-start;
+}
+
+.nav-lookup-results {
+  min-height: 180px;
+  max-height: min(52dvh, 560px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .type-dialog-option {
   display: grid;
   justify-items: center;
@@ -425,10 +442,18 @@ textarea {
 }
 
 .graph-panel {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 10px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  overflow: hidden;
+}
+
+.graph-panel-actions {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 3;
 }
 
 .graph-tool {
@@ -468,11 +493,16 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
-  align-items: center;
+  align-items: start;
   padding: 9px 11px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(255, 252, 247, 0.92);
+}
+
+.graph-code-main {
+  display: grid;
+  gap: 8px;
 }
 
 .graph-code-value {
@@ -491,9 +521,61 @@ textarea {
   font-size: 0.76rem;
 }
 
+.graph-route-list {
+  display: grid;
+  gap: 6px;
+}
+
+.graph-route-card {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid rgba(83, 60, 44, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 250, 243, 0.76);
+  text-align: left;
+}
+
+.graph-route-card.is-button {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.graph-route-card.is-button:hover {
+  border-color: rgba(140, 60, 36, 0.28);
+  background: rgba(140, 60, 36, 0.08);
+}
+
+.graph-route-arrow {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.graph-route-number {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.graph-route-title {
+  color: var(--text);
+  font-size: 0.86rem;
+  line-height: 1.2;
+}
+
+.graph-route-subtitle {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.2;
+}
+
 .graph-canvas-wrap {
   position: relative;
-  min-height: 560px;
+  flex: 1;
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background:
@@ -1842,5 +1924,9 @@ textarea[name="sourceExtracts"] {
 
   .type-dialog-grid {
     grid-template-columns: 1fr;
+  }
+
+  .nav-lookup-dialog-card {
+    width: min(100vw - 20px, 100%);
   }
 }

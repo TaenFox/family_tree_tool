@@ -398,33 +398,13 @@
         </section>
 
         <section class="editor-panel graph-panel is-hidden" id="graph-panel">
+          <div class="graph-panel-actions">
+            <button class="button button-primary" id="nav-lookup-open" type="button">Найти связь</button>
+          </div>
           <div class="graph-canvas-wrap">
             <div class="graph-empty" id="graph-empty">Граф доступен для сохранённых карточек.</div>
             <div class="graph-canvas is-hidden" id="graph-canvas"></div>
           </div>
-          <section class="graph-tool">
-            <div class="block-header">
-              <h3>Адресный шифр</h3>
-            </div>
-            <div class="graph-tool-row">
-              <label class="field">
-                <span>От карточки</span>
-                <select id="nav-code-from" class="picker-select">
-                  <option value="">Выбери человека</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>К карточке</span>
-                <select id="nav-code-to" class="picker-select">
-                  <option value="">Выбери человека</option>
-                </select>
-              </label>
-              <button class="button button-primary" id="nav-code-build" type="button">Построить</button>
-            </div>
-            <div class="graph-tool-results" id="nav-code-results">
-              <p class="graph-tool-hint">Шифр строится по текущим связям людей и не записывается в карточку.</p>
-            </div>
-          </section>
         </section>
       </section>
     </main>
@@ -469,6 +449,36 @@
           </button>
         </div>
       </form>
+    </dialog>
+
+    <dialog class="type-dialog nav-lookup-dialog" id="nav-lookup-dialog">
+      <div class="type-dialog-card nav-lookup-dialog-card">
+        <div class="type-dialog-head nav-lookup-head">
+          <div>
+            <h3>Найти связь между людьми</h3>
+            <p class="type-dialog-text">Выбери две карточки людей и посмотри маршрут между ними. Шифр остаётся вспомогательным представлением.</p>
+          </div>
+          <button class="button button-secondary small" id="nav-lookup-close" type="button">Закрыть</button>
+        </div>
+        <div class="graph-tool-row nav-lookup-row">
+          <label class="field">
+            <span>От карточки</span>
+            <select id="nav-code-from" class="picker-select">
+              <option value="">Выбери человека</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>К карточке</span>
+            <select id="nav-code-to" class="picker-select">
+              <option value="">Выбери человека</option>
+            </select>
+          </label>
+          <button class="button button-primary" id="nav-code-build" type="button">Построить</button>
+        </div>
+        <div class="graph-tool-results nav-lookup-results" id="nav-code-results">
+          <p class="graph-tool-hint">Маршрут строится по текущим связям людей и не записывается в карточку.</p>
+        </div>
+      </div>
     </dialog>
 
     <script src="/app.js" defer></script>
