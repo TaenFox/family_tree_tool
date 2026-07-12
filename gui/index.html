@@ -481,6 +481,20 @@
       </div>
     </dialog>
 
-    <script src="/app.js" defer></script>
+    <!-- Сторонние библиотеки (UMD, создают глобальные переменные — грузятся до модулей GUI). -->
+    <script src="/js/vendor/dagre.min.js" defer></script>
+
+    <!-- Модули GUI. Порядок важен: dom-and-state.js создаёт общие переменные, main.js стартует приложение. -->
+    <script src="/js/dom-and-state.js" defer></script>
+    <script src="/js/navigation-code.js" defer></script>
+    <script src="/js/helpers.js" defer></script>
+    <script src="/js/navigation-lookup.js" defer></script>
+    <script src="/js/facts-tables.js" defer></script>
+    <script src="/js/graph.js" defer></script>
+    <script src="/js/photos.js" defer></script>
+    <script src="/js/editor.js" defer></script>
+    <script src="/js/relations.js" defer></script>
+    <script src="/js/card-actions.js" defer></script>
+    <script src="/js/main.js" defer></script>
   </body>
 </html>
