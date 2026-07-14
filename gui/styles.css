@@ -285,6 +285,59 @@ textarea {
   margin-top: 16px;
 }
 
+.type-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.button-danger {
+  background: linear-gradient(135deg, #e06a5a, #c8452f);
+  color: #fff8f2;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 160px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+}
+
+.context-menu.is-hidden {
+  display: none;
+}
+
+.context-menu-item {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu-item:hover {
+  background: var(--accent-soft);
+}
+
+.context-menu-danger {
+  color: #c8452f;
+}
+
+.context-menu-danger:hover {
+  background: rgba(200, 69, 47, 0.12);
+}
+
 .nav-lookup-dialog-card {
   width: min(860px, calc(100vw - 24px));
   display: grid;
@@ -1348,11 +1401,20 @@ textarea[name="sourceExtracts"] {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 6px;
-  width: min(280px, 100%);
+  width: 330px;
+}
+
+.picker-dropdown {
+  position: relative;
+  width: 100%;
 }
 
 .picker-select {
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   border: 1px solid rgba(105, 81, 62, 0.16);
   border-radius: var(--radius-md);
   background: var(--surface-strong);
@@ -1360,15 +1422,68 @@ textarea[name="sourceExtracts"] {
   padding: 9px 11px;
   font-size: 0.76rem;
   font-weight: 400;
+  text-align: left;
+  cursor: pointer;
 }
 
-.picker-select.is-empty {
+.picker-select::placeholder {
   color: rgba(109, 93, 80, 0.52);
 }
 
-.picker-select:focus {
+.picker-toggle-caret {
+  flex: none;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.picker-select:focus,
+.picker-select[aria-expanded="true"] {
   outline: 2px solid rgba(140, 60, 36, 0.16);
   border-color: rgba(140, 60, 36, 0.32);
+}
+
+.picker-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  /* Фиксированная высота с прокруткой внутри списка. */
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+}
+
+.picker-menu.is-hidden {
+  display: none;
+}
+
+.picker-option {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.76rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.picker-option:hover {
+  background: var(--accent-soft);
+}
+
+.picker-empty {
+  padding: 8px 10px;
+  color: var(--muted);
+  font-size: 0.76rem;
 }
 
 .toggle-link {
@@ -1608,6 +1723,224 @@ textarea[name="sourceExtracts"] {
   grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   align-items: start;
+}
+
+/* Номер карточки — без акцента, приглушённо-серый */
+.field-muted > span {
+  color: rgba(109, 93, 80, 0.6);
+}
+
+.field-muted input {
+  color: var(--muted);
+  background: rgba(240, 235, 228, 0.5);
+  border-color: rgba(105, 81, 62, 0.1);
+}
+
+.card-number-field {
+  max-width: 200px;
+}
+
+/* Составное имя: Фамилия / Имя / Отчество */
+.person-name-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* Девичья / вторая фамилия, сведения о смерти */
+.person-maiden-block,
+.person-death-block {
+  display: grid;
+  gap: 8px;
+}
+
+.checkbox-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.checkbox-field input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Пустой слот выбранного места не занимает высоту (остаётся только ввод) */
+.place-reference-slot:empty {
+  min-height: 0;
+}
+
+/* Режим просмотра сохранённой карточки (edit mode off): поля как текст */
+.editor-panel.is-locked input:disabled,
+.editor-panel.is-locked select:disabled,
+.editor-panel.is-locked textarea:disabled {
+  opacity: 1;
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
+  background: transparent;
+  border-color: transparent;
+  cursor: default;
+  padding-left: 0;
+}
+
+/* В режиме просмотра прячем всё, что нужно только для правки */
+.editor-panel.is-locked .date-calendar-button,
+.editor-panel.is-locked .place-combobox,
+.editor-panel.is-locked .picker-dropdown,
+.editor-panel.is-locked .photo-upload,
+.editor-panel.is-locked .notes-toolbar,
+.editor-panel.is-locked .checkbox-field,
+.editor-panel.is-locked .place-reference-clear,
+.editor-panel.is-locked #add-fact-button,
+.editor-panel.is-locked #add-rename-button,
+.editor-panel.is-locked #add-research-entry-button,
+.editor-panel.is-locked [data-fact-delete],
+.editor-panel.is-locked [data-fact-move],
+.editor-panel.is-locked [data-rename-delete],
+.editor-panel.is-locked [data-rename-move],
+.editor-panel.is-locked [data-research-entry-delete],
+.editor-panel.is-locked [data-research-entry-move],
+.editor-panel.is-locked [data-remove-relation],
+.editor-panel.is-locked [data-move-relation],
+.editor-panel.is-locked [data-toggle-parent-native],
+.editor-panel.is-locked [data-remove-fact-source],
+.editor-panel.is-locked [data-remove-research-link],
+.editor-panel.is-locked [data-delete-photo],
+.editor-panel.is-locked [data-main-photo] {
+  display: none !important;
+}
+
+/* Поле даты: текст + кнопка календаря */
+.date-field {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.date-field .date-text-input {
+  padding: 9px 11px;
+  font-size: 0.88rem;
+}
+
+.date-calendar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  border: 1px solid rgba(105, 81, 62, 0.16);
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+  color: var(--text);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.date-calendar-button:hover {
+  border-color: rgba(140, 60, 36, 0.32);
+  background: var(--accent-soft);
+}
+
+.date-native-input {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Комбобокс места: свободный ввод + подсказки из справочника */
+.place-combobox {
+  position: relative;
+  display: grid;
+  gap: 4px;
+}
+
+.place-combobox .place-search-input {
+  padding: 9px 11px;
+  font-size: 0.88rem;
+}
+
+.place-suggest-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  min-height: 0.9rem;
+  line-height: 1.2;
+}
+
+.place-suggest-hint.is-ok {
+  color: #2f7d4f;
+}
+
+.place-suggest-hint.is-warn {
+  color: var(--accent);
+}
+
+.place-suggestions {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+  box-shadow: 0 12px 28px rgba(83, 60, 44, 0.18);
+}
+
+.place-suggest-item {
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.place-suggest-item:hover,
+.place-suggest-item.is-active {
+  background: var(--accent-soft);
+}
+
+.place-suggest-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.place-suggest-meta {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.place-suggest-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.place-suggest-freetext .place-suggest-main {
+  color: var(--muted);
+  font-weight: 400;
+  font-style: italic;
 }
 
 .notes-toolbar {
