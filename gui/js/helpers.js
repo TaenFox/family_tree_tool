@@ -107,6 +107,11 @@ function placeReferenceHtml(value, { fieldName = "", rowIndex = null } = {}) {
     : `data-fact-place-clear="${escapeHtml(String(rowIndex))}"`;
 
   if (empty) {
+    // Пусто — карточку-ссылку не показываем, остаётся только строка ввода
+    // (чтобы не было двух полей с одним смыслом). Для фактов сохраняем плейсхолдер.
+    if (fieldName) {
+      return "";
+    }
     return `
       <div class="place-reference-card is-empty">
         <div class="place-reference-copy">
@@ -141,7 +146,18 @@ function renderPlaceReferences() {
     if (!field) {
       return;
     }
+    const hasValue = Boolean(String(field.value || "").trim());
     slot.innerHTML = placeReferenceHtml(field.value, { fieldName });
+    // Строку ввода прячем, когда место уже выбрано (одно поле вместо двух).
+    const combobox = document.querySelector(`[data-place-combobox="${fieldName}"]`);
+    combobox?.classList.toggle("is-hidden", hasValue);
+    if (!hasValue) {
+      const hint = document.querySelector(`[data-place-hint="${fieldName}"]`);
+      if (hint) {
+        hint.textContent = "";
+        hint.className = "place-suggest-hint";
+      }
+    }
   });
 }
 
@@ -191,7 +207,9 @@ function setDeathFieldsVisible(visible) {
   deathFieldsVisible = visible;
   deathDateField.classList.toggle("is-hidden", !visible);
   deathPlaceField.classList.toggle("is-hidden", !visible);
-  deathToggle.textContent = visible ? "Скрыть сведения о смерти" : "Добавить сведения о смерти";
+  if (deathToggle) {
+    deathToggle.checked = visible;
+  }
 }
 
 function applyNotesMode(mode) {
@@ -202,6 +220,17 @@ function applyNotesMode(mode) {
   notesModeButtons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.notesMode === notesMode);
   });
+}
+
+function setFormLocked(locked) {
+  formLocked = locked;
+  formPanel.classList.toggle("is-locked", locked);
+  // Блокируем все интерактивные элементы формы. Значения читаются и в
+  // disabled-состоянии, поэтому это безопасно для сохранения после разблокировки.
+  formPanel.querySelectorAll("input, select, textarea, button").forEach((element) => {
+    element.disabled = locked;
+  });
+  updateModeUi();
 }
 
 function applyEditorView(mode) {

@@ -40,7 +40,9 @@
         <div class="editor-topbar">
           <h2 id="mode-title">Новая запись</h2>
           <div class="topbar-controls">
+            <button class="button button-secondary is-hidden" id="edit-button" type="button">Редактировать</button>
             <button class="button button-primary" id="submit-button" type="submit" form="card-form">Сохранить</button>
+            <button class="button button-secondary small" id="cancel-button" type="button">Отмена</button>
             <div class="segmented" role="tablist" aria-label="Режим просмотра карточки">
               <button class="segmented-button is-active" data-editor-view="form" type="button">Форма</button>
               <button class="segmented-button" data-editor-view="graph" type="button">Граф</button>
@@ -58,58 +60,111 @@
               <div class="hero-grid">
                 <div class="hero-main">
                   <div class="form-row form-row-primary">
-                    <label class="field">
+                    <label class="field field-muted card-number-field">
                       <span>Номер карточки</span>
                       <input name="cardNumber" placeholder="К-002" required />
                     </label>
-                    <label class="field wide">
+                    <label class="field wide" id="primary-name-field">
                       <span id="primary-name-label">Имя при рождении</span>
-                      <input name="primaryName" placeholder="Имя Фамилия" required />
+                      <input name="primaryName" placeholder="Имя Фамилия" />
                     </label>
                   </div>
+
+                  <div class="form-row person-name-fields" data-type-section="person">
+                    <label class="field">
+                      <span>Имя*</span>
+                      <input name="givenName" placeholder="Иван" />
+                    </label>
+                    <label class="field">
+                      <span>Фамилия</span>
+                      <input name="surname" placeholder="Иванов" />
+                    </label>
+                    <label class="field">
+                      <span>Отчество</span>
+                      <input name="patronymic" placeholder="Иванович" />
+                    </label>
+                  </div>
+
+                  <div class="person-maiden-block" data-type-section="person">
+                    <label class="checkbox-field">
+                      <input type="checkbox" id="maiden-toggle" />
+                      <span>Указать девичью / вторую фамилию</span>
+                    </label>
+                    <label class="field is-hidden" id="maiden-name-field">
+                      <span>Девичья / вторая фамилия</span>
+                      <input name="maidenName" placeholder="Петрова" />
+                    </label>
+                  </div>
+
+                  <label class="field">
+                    <span>Пол</span>
+                    <select name="sex">
+                      <option value="">...</option>
+                      <option value="мужской">Мужской</option>
+                      <option value="женский">Женский</option>
+                    </select>
+                  </label>
 
                   <div class="hero-person-fields" data-type-section="person">
                     <label class="field">
                       <span>Дата рождения</span>
-                      <input name="birthDate" placeholder="12.03.1901" />
+                      <div class="date-field" data-date-field>
+                        <input name="birthDate" class="date-text-input" placeholder="12.03.1901" inputmode="numeric" autocomplete="off" />
+                        <button type="button" class="date-calendar-button" data-date-picker="birthDate" aria-label="Выбрать дату в календаре" title="Календарь">📅</button>
+                        <input type="date" class="date-native-input" data-date-native="birthDate" tabindex="-1" aria-hidden="true" />
+                      </div>
                     </label>
-                    <label class="field">
-                      <span>Пол</span>
-                      <select name="sex">
-                        <option value="">...</option>
-                        <option value="мужской">Мужской</option>
-                        <option value="женский">Женский</option>
-                      </select>
-                    </label>
+
                     <label class="field">
                       <span>Место рождения</span>
                       <div class="place-field-stack">
                         <input name="birthPlace" type="hidden" />
                         <div class="place-reference-slot" data-place-reference="birthPlace"></div>
-                        <div class="place-field-actions">
-                          <select class="picker-select is-empty place-inline-picker" id="birth-place-picker">
-                            <option value="">Выбери карточку места</option>
-                          </select>
+                        <div class="place-combobox" data-place-combobox="birthPlace">
+                          <input
+                            type="text"
+                            class="place-search-input"
+                            data-place-search="birthPlace"
+                            placeholder="Начни вводить город или название места"
+                            autocomplete="off"
+                          />
+                          <div class="place-suggest-hint" data-place-hint="birthPlace"></div>
+                          <ul class="place-suggestions is-hidden" data-place-suggestions="birthPlace"></ul>
                         </div>
                       </div>
                     </label>
-                    <button class="toggle-link" id="death-toggle" type="button">Добавить сведения о смерти</button>
-                    <label class="field is-hidden" id="death-date-field">
-                      <span>Дата смерти</span>
-                      <input name="deathDate" placeholder="..." />
-                    </label>
-                    <label class="field is-hidden" id="death-place-field">
-                      <span>Место смерти</span>
-                      <div class="place-field-stack">
-                        <input name="deathPlace" type="hidden" />
-                        <div class="place-reference-slot" data-place-reference="deathPlace"></div>
-                        <div class="place-field-actions">
-                          <select class="picker-select is-empty place-inline-picker" id="death-place-picker">
-                            <option value="">Выбери карточку места</option>
-                          </select>
+                    <div class="person-death-block" data-type-section="person">
+                      <label class="checkbox-field">
+                        <input type="checkbox" id="death-toggle" />
+                        <span>Добавить сведения о смерти</span>
+                      </label>
+                      <label class="field is-hidden" id="death-date-field">
+                        <span>Дата смерти</span>
+                        <div class="date-field" data-date-field>
+                          <input name="deathDate" class="date-text-input" placeholder="12.03.1970" inputmode="numeric" autocomplete="off" />
+                          <button type="button" class="date-calendar-button" data-date-picker="deathDate" aria-label="Выбрать дату в календаре" title="Календарь">📅</button>
+                          <input type="date" class="date-native-input" data-date-native="deathDate" tabindex="-1" aria-hidden="true" />
                         </div>
-                      </div>
-                    </label>
+                      </label>
+                      <label class="field is-hidden" id="death-place-field">
+                        <span>Место смерти</span>
+                        <div class="place-field-stack">
+                          <input name="deathPlace" type="hidden" />
+                          <div class="place-reference-slot" data-place-reference="deathPlace"></div>
+                          <div class="place-combobox" data-place-combobox="deathPlace">
+                            <input
+                              type="text"
+                              class="place-search-input"
+                              data-place-search="deathPlace"
+                              placeholder="Начни вводить город или название места"
+                              autocomplete="off"
+                            />
+                            <div class="place-suggest-hint" data-place-hint="deathPlace"></div>
+                            <ul class="place-suggestions is-hidden" data-place-suggestions="deathPlace"></ul>
+                          </div>
+                        </div>
+                      </label>
+                    </div>
                   </div>
 
                   <div class="hero-group-fields is-hidden" data-type-section="group">
@@ -251,8 +306,8 @@
               <div class="block-header">
                 <h3>Навигационный шифр</h3>
                 <div class="segmented" role="tablist" aria-label="Режим навигационного шифра">
-                  <button class="segmented-button is-active" data-nav-mode="read" type="button">Просмотр</button>
-                  <button class="segmented-button" data-nav-mode="edit" type="button">Составление</button>
+                  <button class="segmented-button is-active" data-nav-mode="edit" type="button">Редактор</button>
+                  <button class="segmented-button" data-nav-mode="read" type="button">Превью</button>
                 </div>
               </div>
               <div class="nav-code-read" id="navigation-code-read"></div>
@@ -370,8 +425,8 @@
               <div class="block-header">
                 <h3>Примечания</h3>
                 <div class="segmented" role="tablist" aria-label="Режим примечаний">
-                  <button class="segmented-button" data-notes-mode="editor" type="button">Редактор</button>
-                  <button class="segmented-button is-active" data-notes-mode="preview" type="button">Превью</button>
+                  <button class="segmented-button is-active" data-notes-mode="editor" type="button">Редактор</button>
+                  <button class="segmented-button" data-notes-mode="preview" type="button">Превью</button>
                 </div>
               </div>
               <div class="notes-toolbar is-hidden" id="notes-toolbar">
@@ -451,6 +506,24 @@
       </form>
     </dialog>
 
+    <div class="context-menu is-hidden" id="card-context-menu" role="menu">
+      <button class="context-menu-item context-menu-danger" type="button" data-context-action="delete" role="menuitem">Удалить</button>
+      <button class="context-menu-item" type="button" data-context-action="cancel" role="menuitem">Отмена</button>
+    </div>
+
+    <dialog class="type-dialog" id="delete-card-dialog">
+      <form method="dialog" class="type-dialog-card">
+        <div class="type-dialog-head">
+          <h3>Удаление карточки</h3>
+        </div>
+        <p class="type-dialog-text">Удалить карточку «<span id="delete-card-name"></span>»? Действие необратимо.</p>
+        <div class="type-dialog-actions">
+          <button class="button button-secondary" type="submit" value="cancel">Отмена</button>
+          <button class="button button-danger" id="delete-card-confirm" type="submit" value="delete">Удалить</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog class="type-dialog nav-lookup-dialog" id="nav-lookup-dialog">
       <div class="type-dialog-card nav-lookup-dialog-card">
         <div class="type-dialog-head nav-lookup-head">
@@ -495,6 +568,7 @@
     <script src="/js/editor.js" defer></script>
     <script src="/js/relations.js" defer></script>
     <script src="/js/card-actions.js" defer></script>
+    <script src="/js/form-fields.js" defer></script>
     <script src="/js/main.js" defer></script>
   </body>
 </html>

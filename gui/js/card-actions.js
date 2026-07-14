@@ -4,7 +4,8 @@
 async function startEditing(cardPath) {
   const requestVersion = editorLoadVersion + 1;
   editorLoadVersion = requestVersion;
-  applyEditorView("form");
+  // Вид (форма/граф) не переключаем — сохраняем текущее состояние при
+  // переходе между людьми (в т.ч. по узлам графа).
   const identity = cardIdentityFromPath(cardPath);
   const response = await fetch(
     `/api/card?type=${encodeURIComponent(identity.cardType)}&directory=${encodeURIComponent(identity.directory)}`,
@@ -26,7 +27,28 @@ async function startEditing(cardPath) {
   }
   renderRelationLists();
   renderCardList();
-  setStatus(`Загружена карточка ${payload.number} для редактирования.`);
+  // Сохранённая карточка открывается заблокированной (режим просмотра).
+  setFormLocked(true);
+  setStatus(`Карточка ${payload.number} открыта. Нажми «Редактировать», чтобы изменить.`);
+}
+
+async function deleteCard(cardPath) {
+  const identity = cardIdentityFromPath(cardPath);
+  const response = await fetch(
+    `/api/card?type=${encodeURIComponent(identity.cardType)}&directory=${encodeURIComponent(identity.directory)}`,
+    { method: "DELETE" },
+  );
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(result.error || "Не удалось удалить карточку.");
+  }
+  // Если удаляли открытую карточку — возвращаемся к чистому обзору.
+  if (editingState && editingState.directory === identity.directory && editingState.cardType === identity.cardType) {
+    resetFormToCreateMode();
+    applyEditorView("graph");
+  }
+  await loadState();
+  setStatus("Карточка удалена.", "success");
 }
 
 async function loadState() {
@@ -138,20 +160,18 @@ async function submitForm(event) {
   }
 
   const updateCount = (result.navigation_updates || []).length;
+  const savedPath = result.path;
+  const savedType = payload.cardType || "person";
+
+  // Логичный выход: после сохранения (и создания, и правки) выходим из
+  // режима редактирования в чистую форму «Новая запись».
+  await loadState();
+  resetFormToCreateMode(savedType);
+  applyEditorView("form");
   setStatus(
-    `${editing ? "Карточка обновлена" : "Карточка создана"}: ${result.path}${updateCount ? `. Обновлено шифров: ${updateCount}` : ""}`,
+    `${editing ? "Карточка обновлена" : "Карточка создана"}: ${savedPath}${updateCount ? `. Обновлено шифров: ${updateCount}` : ""}. Форма очищена для новой записи.`,
     "success",
   );
-
-  if (editing) {
-    await loadState();
-    await startEditing(result.path);
-  } else {
-    await loadState();
-    applyEditorView("form");
-    await startEditing(result.path);
-    setStatus(`Карточка создана: ${result.path}`, "success");
-  }
 }
 
 async function uploadPhotoFile(cardType, directory, file) {

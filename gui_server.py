@@ -44,6 +44,10 @@ DOCS_WRITE_LOCK = threading.Lock()
 CARD_NUMBER_PATTERN = re.compile(r"^\s*([КкKkCСcсГгGgМмMmИиSsВвVv])\s*-\s*(\d{3})\s*$")
 NUMBER_LINE_PATTERN = re.compile(r"^Номер карточки:\s*`?([^`\n]+)`?\s*$", re.MULTILINE)
 PERSON_TITLE_PATTERN = re.compile(r"^Имя при рождении:\s*`?([^`\n]+)`?\s*$", re.MULTILINE)
+PERSON_SURNAME_PATTERN = re.compile(r"^Фамилия:\s*`?([^`\n]*)`?\s*$", re.MULTILINE)
+PERSON_GIVEN_PATTERN = re.compile(r"^Имя:\s*`?([^`\n]*)`?\s*$", re.MULTILINE)
+PERSON_PATRONYMIC_PATTERN = re.compile(r"^Отчество:\s*`?([^`\n]*)`?\s*$", re.MULTILINE)
+PERSON_MAIDEN_PATTERN = re.compile(r"^Девичья / вторая фамилия:\s*`?([^`\n]*)`?\s*$", re.MULTILINE)
 GROUP_TITLE_PATTERN = re.compile(
     r"^Название / обозначение группы:\s*`?([^`\n]+)`?\s*$",
     re.MULTILINE,
@@ -88,6 +92,10 @@ class CardDetails:
     directory: str
     number: str
     primary_name: str
+    surname: str = ""
+    given_name: str = ""
+    patronymic: str = ""
+    maiden_name: str = ""
     main_photo: str = ""
     birth_date: str = ""
     sex: str = ""
@@ -129,6 +137,17 @@ class AppConfig:
 
 def placeholder(value: str) -> str:
     return value.strip() or "..."
+
+
+def clean_field(value: str) -> str:
+    """Прочитанное значение поля: убирает плейсхолдер «...»."""
+    value = str(value).strip()
+    return "" if value == "..." else value
+
+
+def compose_person_name(surname: str, given: str, patronymic: str) -> str:
+    """Полное имя в порядке «Фамилия Имя Отчество» без пустых частей."""
+    return " ".join(part for part in (surname.strip(), given.strip(), patronymic.strip()) if part)
 
 
 def split_lines(value: str) -> list[str]:
@@ -915,6 +934,19 @@ def read_card_details(card_type: str, directory_name: str) -> CardDetails:
     details.main_photo = image_value(photo_match.group(1) if photo_match else "")
 
     if card_type == "person":
+        surname_match = PERSON_SURNAME_PATTERN.search(text)
+        given_match = PERSON_GIVEN_PATTERN.search(text)
+        patronymic_match = PERSON_PATRONYMIC_PATTERN.search(text)
+        details.surname = clean_field(surname_match.group(1)) if surname_match else ""
+        details.given_name = clean_field(given_match.group(1)) if given_match else ""
+        details.patronymic = clean_field(patronymic_match.group(1)) if patronymic_match else ""
+        maiden_match = PERSON_MAIDEN_PATTERN.search(text)
+        details.maiden_name = clean_field(maiden_match.group(1)) if maiden_match else ""
+        if not any((details.surname, details.given_name, details.patronymic)):
+            # Обратная совместимость со старыми карточками без разбитого имени:
+            # кладём всё имя в «Имя», чтобы ничего не потерять.
+            details.given_name = details.primary_name
+
         basic = table_values(section_body(text, "Основные сведения"))
         relations_section = section_body(text, "Родственные связи")
         details.birth_date = text_value(basic.get("Дата рождения", ""))
@@ -988,12 +1020,121 @@ def collect_cards(card_type: str) -> list[CardRecord]:
     return sorted(cards, key=lambda item: item.sort_key)
 
 
+PLACES_DATA_PATH = GUI_DIR / "data" / "places.json"
+_places_dataset_cache: list[dict[str, Any]] | None = None
+
+
+def load_places_dataset() -> list[dict[str, Any]]:
+    """Локальный оффлайн-справочник населённых пунктов (без внешних вызовов)."""
+    global _places_dataset_cache
+    if _places_dataset_cache is not None:
+        return _places_dataset_cache
+    entries: list[dict[str, Any]] = []
+    try:
+        raw = json.loads(PLACES_DATA_PATH.read_text(encoding="utf-8"))
+        for item in raw.get("places", []):
+            name = str(item.get("name", "")).strip()
+            if not name:
+                continue
+            entries.append(
+                {
+                    "name": name,
+                    "region": str(item.get("region", "")).strip(),
+                    "country": str(item.get("country", "")).strip(),
+                    "type": str(item.get("type", "")).strip(),
+                    "aliases": [str(alias).strip() for alias in item.get("aliases", []) if str(alias).strip()],
+                }
+            )
+    except (OSError, json.JSONDecodeError):
+        entries = []
+    _places_dataset_cache = entries
+    return entries
+
+
+def place_reference_value(entry: dict[str, Any]) -> str:
+    """Обогащённый текст для хранения: «Город, Регион, Страна» без дублей."""
+    parts: list[str] = []
+    for value in (entry.get("name", ""), entry.get("region", ""), entry.get("country", "")):
+        value = str(value).strip()
+        if value and value not in parts:
+            parts.append(value)
+    return ", ".join(parts)
+
+
+def search_place_suggestions(query: str, limit: int = 8) -> list[dict[str, Any]]:
+    needle = query.strip().lower()
+    suggestions: list[dict[str, Any]] = []
+
+    # 1. Существующие карточки мест — приоритетнее справочника (гибридное хранение).
+    for record in collect_cards("place"):
+        title = record.title.strip()
+        if not title:
+            continue
+        haystack = f"{title} {record.number}".lower()
+        if needle and needle not in haystack:
+            continue
+        suggestions.append(
+            {
+                "kind": "card",
+                "label": title,
+                "meta": " · ".join(part for part in [record.number, record.place_type] if part),
+                "path": record.path,
+                "value": record.path,
+            }
+        )
+
+    # 2. Локальный справочник населённых пунктов.
+    for entry in load_places_dataset():
+        matched_alias = ""
+        if needle:
+            if needle in entry["name"].lower():
+                rank_source = entry["name"].lower()
+            else:
+                matched_alias = next(
+                    (alias for alias in entry["aliases"] if needle in alias.lower()),
+                    "",
+                )
+                if not matched_alias:
+                    continue
+                rank_source = matched_alias.lower()
+        else:
+            rank_source = entry["name"].lower()
+        meta_parts = [part for part in [entry["region"], entry["country"]] if part]
+        if matched_alias:
+            meta_parts.append(f"ранее: {matched_alias}")
+        suggestions.append(
+            {
+                "kind": "reference",
+                "label": entry["name"],
+                "meta": " · ".join(meta_parts),
+                "value": place_reference_value(entry),
+                "region": entry["region"],
+                "country": entry["country"],
+                "place_type": entry["type"],
+                "_rank": 0 if rank_source.startswith(needle) else 1,
+            }
+        )
+
+    def sort_key(item: dict[str, Any]) -> tuple[int, int, str]:
+        kind_rank = 0 if item["kind"] == "card" else 1
+        return (kind_rank, item.get("_rank", 0), item["label"].lower())
+
+    suggestions.sort(key=sort_key)
+    for item in suggestions:
+        item.pop("_rank", None)
+    return suggestions[:limit]
+
+
 def details_to_payload(details: CardDetails) -> dict[str, str]:
     return {
         "cardType": details.card_type,
         "editDirectory": details.directory,
         "cardNumber": details.number,
         "primaryName": details.primary_name,
+        "surname": details.surname,
+        "givenName": details.given_name,
+        "patronymic": details.patronymic,
+        "maidenName": details.maiden_name,
         "mainPhoto": details.main_photo,
         "birthDate": details.birth_date,
         "sex": details.sex,
@@ -1029,6 +1170,13 @@ def details_to_payload(details: CardDetails) -> dict[str, str]:
 
 def normalize_payload_relations(payload: dict[str, str], card_type: str) -> None:
     if card_type == "person":
+        composed = compose_person_name(
+            payload.get("surname", ""),
+            payload.get("givenName", ""),
+            payload.get("patronymic", ""),
+        )
+        if composed:
+            payload["primaryName"] = composed
         for field_name in ("parents", "siblings", "children", "partners", "groups"):
             payload[field_name] = relation_entries_json(renumber_relation_entries(parse_relation_payload(payload.get(field_name, ""), field_name)))
     elif card_type == "group":
@@ -1263,7 +1411,11 @@ def render_card_anchor(directory_name: str) -> str:
 def render_person_card(data: dict[str, str], number: str, directory_name: str) -> str:
     photo_name = image_value(data.get("mainPhoto", ""))
     photo_cell = render_photo_block("person", directory_name, photo_name)
-    title = placeholder(data.get("primaryName", "").strip()) or "..."
+    surname = data.get("surname", "").strip()
+    given = data.get("givenName", "").strip()
+    patronymic = data.get("patronymic", "").strip()
+    full_name = compose_person_name(surname, given, patronymic) or data.get("primaryName", "").strip()
+    title = placeholder(full_name)
     return f"""{render_card_anchor(directory_name)}
 = {number} {title}
 
@@ -1272,7 +1424,15 @@ def render_person_card(data: dict[str, str], number: str, directory_name: str) -
 a|
 Номер карточки: `{number}`
 
-Имя при рождении: `{placeholder(data.get("primaryName", ""))}`
+Имя при рождении: `{placeholder(full_name)}`
+
+Фамилия: `{placeholder(surname)}`
+
+Имя: `{placeholder(given)}`
+
+Отчество: `{placeholder(patronymic)}`
+
+Девичья / вторая фамилия: `{placeholder(data.get("maidenName", ""))}`
 a|
 {photo_cell}
 |===
@@ -1823,6 +1983,21 @@ def delete_image(card_type: str, directory_name: str, filename: str) -> None:
         details.main_photo = ""
         write_card_details(details)
         rebuild_indexes()
+
+
+def delete_card(card_type: str, directory_name: str) -> None:
+    root = card_root(card_type)
+    # Защита от выхода за пределы каталога типа (path traversal).
+    card_dir = (root / directory_name).resolve()
+    if root.resolve() not in card_dir.parents:
+        raise ValueError("Некорректный каталог карточки.")
+
+    card_path = card_dir / "card.adoc"
+    if not card_path.exists():
+        raise FileNotFoundError("Карточка не найдена.")
+
+    shutil.rmtree(card_dir)
+    rebuild_indexes()
 
 
 def preview_asset_url(card_type: str, directory_name: str, target: str) -> str:
@@ -2770,6 +2945,16 @@ class GuiHandler(SimpleHTTPRequestHandler):
             self.send_json(HTTPStatus.OK, payload)
             return
 
+        if parsed.path == "/api/place-suggest":
+            params = parse_qs(parsed.query)
+            query = params.get("q", [""])[0]
+            try:
+                limit = max(1, min(20, int(params.get("limit", ["8"])[0])))
+            except ValueError:
+                limit = 8
+            self.send_json(HTTPStatus.OK, {"suggestions": search_place_suggestions(query, limit)})
+            return
+
         if parsed.path == "/api/graph-overview":
             try:
                 payload = graph_overview_payload()
@@ -2941,6 +3126,23 @@ class GuiHandler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/card":
+            params = parse_qs(parsed.query)
+            card_type = params.get("type", [""])[0]
+            directory = params.get("directory", [""])[0]
+            try:
+                with DOCS_WRITE_LOCK:
+                    delete_card(card_type, directory)
+            except FileNotFoundError as error:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": str(error)})
+                return
+            except ValueError as error:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
+                return
+
+            self.send_json(HTTPStatus.OK, {"deleted": True})
+            return
+
         if parsed.path != "/api/image":
             self.send_error(HTTPStatus.NOT_FOUND)
             return

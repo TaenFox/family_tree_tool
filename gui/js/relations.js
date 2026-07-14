@@ -223,25 +223,107 @@ function pickerCards(type) {
   return allCards;
 }
 
+function relationSelectedTargets(fieldName) {
+  // Пути уже выбранных карточек в каноническом виде (совпадает с логикой
+  // дедупликации в appendRelationValue), чтобы исключать их из списка.
+  return new Set(
+    relationValues(fieldName)
+      .map((entry) => relationTargetPath(entry.value))
+      .filter(Boolean),
+  );
+}
+
+function pickerAvailableCards(target, type) {
+  const selected = relationSelectedTargets(target);
+  // Оставляем только ещё не выбранные карточки.
+  return pickerCards(type).filter((card) => !selected.has(relationTargetPath(cardXref(card))));
+}
+
+function pickerMenuItemsHtml(target, type, query) {
+  const available = pickerAvailableCards(target, type);
+  const trimmed = String(query || "").trim().toLowerCase();
+  const filtered = trimmed
+    ? available.filter((card) => String(card.display_label || "").toLowerCase().includes(trimmed))
+    : available;
+
+  if (!filtered.length) {
+    const note = available.length ? "Ничего не найдено" : "Нет доступных карточек";
+    return `<li class="picker-empty">${escapeHtml(note)}</li>`;
+  }
+
+  return filtered
+    .map(
+      (card) => `
+        <li role="option">
+          <button
+            type="button"
+            class="picker-option"
+            data-picker-option="${escapeHtml(target)}"
+            data-picker-value="${escapeHtml(card.path)}"
+          >
+            ${escapeHtml(card.display_label)}
+          </button>
+        </li>
+      `,
+    )
+    .join("");
+}
+
 function renderRelationPickers() {
   relationPickers.forEach((picker) => {
     const target = picker.dataset.pickerTarget;
     const type = picker.dataset.pickerType;
-    const options = pickerCards(type)
-      .map(
-        (card) =>
-          `<option value="${escapeHtml(card.path)}">${escapeHtml(card.display_label)}</option>`,
-      )
-      .join("");
-
     picker.innerHTML = `
       <div class="picker-row">
-        <select class="picker-select is-empty" data-picker-select="${escapeHtml(target)}">
-          <option value="">Выбери существующую карточку</option>
-          ${options}
-        </select>
+        <div class="picker-dropdown" data-picker-dropdown="${escapeHtml(target)}">
+          <input
+            type="text"
+            class="picker-select"
+            data-picker-toggle="${escapeHtml(target)}"
+            data-picker-type="${escapeHtml(type)}"
+            placeholder="Выбрать карточку"
+            autocomplete="off"
+            role="combobox"
+            aria-expanded="false"
+            aria-autocomplete="list"
+          />
+          <ul class="picker-menu is-hidden" data-picker-menu="${escapeHtml(target)}" role="listbox">
+            ${pickerMenuItemsHtml(target, type, "")}
+          </ul>
+        </div>
       </div>
     `;
+  });
+}
+
+function openRelationPickerMenu(toggle) {
+  const dropdown = toggle.closest("[data-picker-dropdown]");
+  const menu = dropdown?.querySelector("[data-picker-menu]");
+  if (!menu) {
+    return;
+  }
+  closeRelationPickerMenus(menu);
+  menu.classList.remove("is-hidden");
+  toggle.setAttribute("aria-expanded", "true");
+}
+
+function closeRelationPickerMenus(except) {
+  document.querySelectorAll("[data-picker-dropdown]").forEach((dropdown) => {
+    const menu = dropdown.querySelector("[data-picker-menu]");
+    if (!menu || menu === except) {
+      return;
+    }
+    menu.classList.add("is-hidden");
+    const toggle = dropdown.querySelector("[data-picker-toggle]");
+    if (!toggle) {
+      return;
+    }
+    toggle.setAttribute("aria-expanded", "false");
+    // Сбрасываем поисковый ввод и восстанавливаем полный список.
+    if (toggle.value) {
+      toggle.value = "";
+      menu.innerHTML = pickerMenuItemsHtml(toggle.dataset.pickerToggle, toggle.dataset.pickerType, "");
+    }
   });
 }
 
@@ -311,4 +393,3 @@ function cardXref(targetCard) {
 function placeXref(targetCard) {
   return `xref:${buildRelativeCardPath(currentType(), targetCard)}[${targetCard.title}]`;
 }
-

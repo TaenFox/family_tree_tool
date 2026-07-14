@@ -7,13 +7,29 @@ function updateModeUi() {
   const currentName = form.elements.primaryName.value.trim();
   modeTitle.textContent = editing ? currentName || "Без имени" : editorView === "graph" ? "Граф связей" : "Новая запись";
   submitButton.textContent = "Сохранить";
-  submitButton.classList.toggle("is-hidden", editorView === "graph");
+  // В графе кнопок правки нет. В форме: заблокированная карточка показывает
+  // «Редактировать», разблокированная (создание/правка) — «Сохранить».
+  const formView = editorView === "form";
+  submitButton.classList.toggle("is-hidden", !formView || formLocked);
+  // Кнопка «Отмена» доступна только в разблокированной форме (создание/правка).
+  cancelButton?.classList.toggle("is-hidden", !formView || formLocked);
+  editButton?.classList.toggle("is-hidden", !formView || !formLocked);
   editorViewToggle?.classList.toggle("is-hidden", overviewGraph);
   form.elements.cardNumber.readOnly = editing;
 }
 
 function applyType(type) {
   form.elements.cardType.value = type;
+  const isPerson = type === "person";
+  // У человека имя вводится тремя полями (Фамилия/Имя/Отчество), поэтому единое
+  // поле «Имя при рождении» скрываем и собираем primaryName из частей.
+  primaryNameField?.classList.toggle("is-hidden", isPerson);
+  if (form.elements.primaryName) {
+    form.elements.primaryName.required = !isPerson;
+  }
+  if (form.elements.givenName) {
+    form.elements.givenName.required = isPerson;
+  }
   primaryNameLabel.textContent = type === "person" ? "Имя при рождении" : type === "group" ? "Название / обозначение группы" : type === "place" ? "Актуальное название" : type === "source" ? "Краткое название" : "Название карточки";
   form.elements.cardNumber.placeholder = type === "person" ? "К-002" : type === "group" ? "Г-002" : type === "place" ? "М-002" : type === "source" ? "И-002" : "В-002";
   form.elements.primaryName.placeholder =
@@ -46,6 +62,11 @@ function clearCardFields() {
   form.elements.editDirectory.value = "";
   form.elements.mainPhoto.value = "";
   form.elements.primaryName.value = "";
+  form.elements.surname.value = "";
+  form.elements.givenName.value = "";
+  form.elements.patronymic.value = "";
+  form.elements.maidenName.value = "";
+  setMaidenFieldVisible(false);
   form.elements.birthDate.value = "";
   form.elements.sex.value = "";
   form.elements.birthPlace.value = "";
@@ -120,6 +141,8 @@ function resetFormToCreateMode(type = "person") {
   renderGraph();
   loadOverviewGraph(editorLoadVersion).catch((error) => setStatus(error.message, "error"));
   resetNavigationCodeResult();
+  // Новая карточка сразу редактируема.
+  setFormLocked(false);
 }
 
 function openNewCardTypeDialog() {
@@ -135,6 +158,11 @@ function populateForm(payload) {
   form.elements.editDirectory.value = payload.directory;
   form.elements.cardNumber.value = payload.number;
   form.elements.primaryName.value = payload.primary_name;
+  form.elements.surname.value = payload.surname || "";
+  form.elements.givenName.value = payload.given_name || "";
+  form.elements.patronymic.value = payload.patronymic || "";
+  form.elements.maidenName.value = payload.maiden_name || "";
+  setMaidenFieldVisible(Boolean((payload.maiden_name || "").trim()));
   preferredMainPhoto = payload.main_photo || "";
   form.elements.mainPhoto.value = preferredMainPhoto;
   form.elements.birthDate.value = payload.birth_date || "";
@@ -201,6 +229,12 @@ function cardIdentityFromPath(path) {
     directory,
     cardType: section === "03-people" ? "person" : section === "04-groups" ? "group" : section === "05-places" ? "place" : section === "06-sources" ? "source" : "research",
   };
+}
+
+function pathFromCardIdentity(identity) {
+  const section =
+    identity.cardType === "group" ? "04-groups" : identity.cardType === "place" ? "05-places" : identity.cardType === "source" ? "06-sources" : identity.cardType === "research" ? "07-research" : "03-people";
+  return `${section}/${identity.directory}`;
 }
 
 function filterCards() {

@@ -20,6 +20,105 @@ newCardButton.addEventListener("click", () => {
   openNewCardTypeDialog();
 });
 
+if (editButton) {
+  editButton.addEventListener("click", () => {
+    setFormLocked(false);
+    setStatus("Режим редактирования включён.");
+  });
+}
+
+if (cancelButton) {
+  cancelButton.addEventListener("click", () => {
+    if (isEditing()) {
+      // Карточка уже существовала: откатываем несохранённые изменения,
+      // перезагружая её с сервера, и возвращаемся в режим просмотра.
+      startEditing(pathFromCardIdentity(editingState))
+        .then(() => setStatus("Изменения отменены."))
+        .catch((error) => setStatus(error.message, "error"));
+      return;
+    }
+    // Новая карточка: сбрасываем введённые значения и выходим из создания.
+    resetFormToCreateMode();
+    applyEditorView("graph");
+    setStatus("Создание карточки отменено.");
+  });
+}
+
+function closeCardContextMenu() {
+  contextMenuTarget = null;
+  cardContextMenu?.classList.add("is-hidden");
+}
+
+function openCardContextMenu(clientX, clientY, cardPath, cardTitle) {
+  if (!cardContextMenu) {
+    return;
+  }
+  contextMenuTarget = { path: cardPath, title: cardTitle };
+  cardContextMenu.classList.remove("is-hidden");
+  // Прижимаем меню к границам окна, чтобы не выходило за экран.
+  const menuRect = cardContextMenu.getBoundingClientRect();
+  const left = Math.min(clientX, window.innerWidth - menuRect.width - 8);
+  const top = Math.min(clientY, window.innerHeight - menuRect.height - 8);
+  cardContextMenu.style.left = `${Math.max(8, left)}px`;
+  cardContextMenu.style.top = `${Math.max(8, top)}px`;
+}
+
+// ПКМ по карточке в списке — контекстное меню с действиями «Удалить»/«Отмена».
+cardList.addEventListener("contextmenu", (event) => {
+  const target = event.target.closest("[data-edit-card]");
+  if (!target) {
+    return;
+  }
+  event.preventDefault();
+  const title = target.querySelector(".nav-item-title")?.textContent?.trim() || "";
+  openCardContextMenu(event.clientX, event.clientY, target.dataset.editCard, title);
+});
+
+if (cardContextMenu) {
+  cardContextMenu.addEventListener("click", (event) => {
+    const actionButton = event.target.closest("[data-context-action]");
+    if (!actionButton) {
+      return;
+    }
+    const action = actionButton.dataset.contextAction;
+    const target = contextMenuTarget;
+    closeCardContextMenu();
+    if (action === "delete" && target) {
+      pendingDeleteTarget = target;
+      deleteCardName.textContent = target.title || target.path;
+      if (typeof deleteCardDialog.showModal === "function") {
+        deleteCardDialog.showModal();
+      } else if (window.confirm(`Удалить карточку «${target.title || target.path}»?`)) {
+        deleteCard(target.path).catch((error) => setStatus(error.message, "error"));
+        pendingDeleteTarget = null;
+      }
+    }
+  });
+}
+
+if (deleteCardDialog) {
+  deleteCardDialog.addEventListener("close", () => {
+    const target = pendingDeleteTarget;
+    pendingDeleteTarget = null;
+    if (deleteCardDialog.returnValue === "delete" && target) {
+      deleteCard(target.path).catch((error) => setStatus(error.message, "error"));
+    }
+  });
+}
+
+// Любой клик мимо меню, прокрутка или Escape закрывают контекстное меню.
+document.addEventListener("click", (event) => {
+  if (contextMenuTarget && !event.target.closest("#card-context-menu")) {
+    closeCardContextMenu();
+  }
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeCardContextMenu();
+  }
+});
+window.addEventListener("scroll", closeCardContextMenu, true);
+
 if (navLookupOpenButton) {
   navLookupOpenButton.addEventListener("click", () => {
     openNavigationLookupDialog();
@@ -53,9 +152,9 @@ if (newCardTypeDialog) {
   });
 }
 
-deathToggle.addEventListener("click", () => {
-  setDeathFieldsVisible(!deathFieldsVisible);
-  if (!deathFieldsVisible) {
+deathToggle.addEventListener("change", () => {
+  setDeathFieldsVisible(deathToggle.checked);
+  if (!deathToggle.checked) {
     form.elements.deathDate.value = "";
     form.elements.deathPlace.value = "";
     renderPlaceReferences();
@@ -482,7 +581,7 @@ document.addEventListener("click", (event) => {
 
   const graphTarget = event.target.closest("[data-graph-open]");
   if (graphTarget) {
-    applyEditorView("form");
+    // Остаёмся в графе — просто загружаем связи выбранного человека.
     startEditing(graphTarget.dataset.graphOpen).catch((error) => setStatus(error.message, "error"));
     return;
   }
@@ -706,7 +805,62 @@ document.addEventListener("click", (event) => {
   values.splice(index, 1);
   updateRelationField(fieldName, renumberRelationEntries(values));
   renderRelationLists();
+  // Удалённая карточка снова доступна для выбора в списке.
+  renderRelationPickers();
   setStatus(`Связь удалена из поля: ${fieldName}.`);
+});
+
+// Кастомный выпадающий список пикеров связей (фикс. высота + прокрутка,
+// исключение уже выбранных карточек).
+document.addEventListener("click", (event) => {
+  const toggle = event.target.closest("[data-picker-toggle]");
+  if (toggle) {
+    // Клик по строке открывает список для выбора.
+    openRelationPickerMenu(toggle);
+    return;
+  }
+
+  const option = event.target.closest("[data-picker-option]");
+  if (option) {
+    const fieldName = option.dataset.pickerOption;
+    const targetCard = allCards.find((card) => card.path === option.dataset.pickerValue);
+    closeRelationPickerMenus(null);
+    if (!targetCard) {
+      setStatus("Не удалось найти выбранную карточку.", "error");
+      return;
+    }
+    appendRelationValue(fieldName, cardXref(targetCard), { native: fieldName === "parents" });
+    renderRelationPickers();
+    setStatus(`Добавлена ссылка в поле: ${fieldName}.`);
+    return;
+  }
+
+  if (!event.target.closest("[data-picker-dropdown]")) {
+    closeRelationPickerMenus(null);
+  }
+});
+
+// Ввод в строке пикера фильтрует выпадающий список по совпадению.
+document.addEventListener("input", (event) => {
+  const toggle = event.target.closest("[data-picker-toggle]");
+  if (!toggle) {
+    return;
+  }
+  const menu = toggle.closest("[data-picker-dropdown]")?.querySelector("[data-picker-menu]");
+  if (!menu) {
+    return;
+  }
+  menu.innerHTML = pickerMenuItemsHtml(toggle.dataset.pickerToggle, toggle.dataset.pickerType, toggle.value);
+  menu.classList.remove("is-hidden");
+  toggle.setAttribute("aria-expanded", "true");
+});
+
+// Escape закрывает открытые списки пикеров.
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && event.target.closest("[data-picker-toggle]")) {
+    closeRelationPickerMenus(null);
+    event.target.blur();
+  }
 });
 
 form.addEventListener("submit", (event) => {
