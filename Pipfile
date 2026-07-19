@@ -4,6 +4,9 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+fastapi = "*"
+python-multipart = "*"
+uvicorn = "*"
 
 [dev-packages]
 

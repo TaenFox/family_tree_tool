@@ -25,8 +25,8 @@ from server.storage.rendering import (render_group_card, render_person_card,
                                       render_section_index, render_source_card)
 from server.textutil import (clean_field, compose_person_name,
                              expand_inline_items, normalize_card_number)
-from server.web_server import runtime
-from server.web_server.runtime import card_root
+from server.web import runtime
+from server.web.runtime import card_root
 
 
 def read_card_details(card_type: str, directory_name: str) -> CardDetails:

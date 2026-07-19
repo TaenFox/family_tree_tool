@@ -9,7 +9,7 @@ from server.constants import XREF_PATTERN
 from server.models.card import CardDetails
 from server.parsing import blank_table_rows, parse_table_rows
 from server.textutil import split_lines
-from server.web_server import runtime
+from server.web import runtime
 
 
 def relation_prefix(field_name: str) -> str:

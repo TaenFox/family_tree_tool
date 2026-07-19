@@ -8,7 +8,7 @@ from server.constants import (GROUP_TITLE_PATTERN, NUMBER_LINE_PATTERN,
                               SECTION_PATTERN, SOURCE_TITLE_PATTERN,
                               SUBSECTION_PATTERN)
 from server.models.card import CardRecord
-from server.web_server import runtime
+from server.web import runtime
 
 
 def parse_card(card_path: Path, card_type: str) -> CardRecord:

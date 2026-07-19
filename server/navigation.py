@@ -13,8 +13,8 @@ from server.storage.cards import (collect_cards, create_card,
                                   update_card, write_card_details)
 from server.storage.relations import (parse_relation_payload,
                                       relation_target_directory)
-from server.web_server import runtime
-from server.web_server.runtime import docs_override, ensure_structure
+from server.web import runtime
+from server.web.runtime import docs_override, ensure_structure
 
 
 def birth_sort_key(value: str) -> tuple[int, Any]:

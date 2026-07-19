@@ -6,7 +6,7 @@ from typing import Any
 from server.storage.cards import (read_card_details, rebuild_indexes,
                                   write_card_details)
 from server.textutil import safe_image_name, unique_image_name
-from server.web_server.runtime import card_root
+from server.web.runtime import card_root
 
 
 def upload_image(card_type: str, directory_name: str, filename: str, fileobj: Any) -> str:

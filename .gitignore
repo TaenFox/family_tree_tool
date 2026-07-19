@@ -1,3 +1,4 @@
 config.json
 workspace/
 __pycache__/
+.vscode/

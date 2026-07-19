@@ -7,7 +7,7 @@ from server.navigation import person_graph_details, record_index
 from server.storage.cards import read_card_details
 from server.storage.relations import (parse_relation_payload,
                                       relation_target_directory)
-from server.web_server import runtime
+from server.web import runtime
 
 
 def build_graph_node(record: CardRecord, center_id: str) -> dict[str, str]:

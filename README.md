@@ -14,6 +14,7 @@
 
 ```bash
 cp config.example.json config.json
+pipenv install
 ```
 
 Пример конфигурации по умолчанию использует `./workspace`.
@@ -25,8 +26,10 @@ cp config.example.json config.json
 Запуск из корня проекта:
 
 ```bash
-python3 -m server
+pipenv run python -m server
 ```
+
+Сервер поднимается на FastAPI/uvicorn (ASGI).
 
 Интерфейс открывается по адресу `http://127.0.0.1:8765`.
 
