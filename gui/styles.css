@@ -634,7 +634,11 @@ textarea {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.18)),
     rgba(255, 251, 245, 0.82);
-  overflow: auto;
+  overflow: hidden;
+}
+
+.graph-canvas-wrap.is-panning {
+  cursor: grabbing;
 }
 
 .graph-empty {
@@ -651,6 +655,7 @@ textarea {
 .graph-canvas {
   position: relative;
   min-height: 560px;
+  transform-origin: 0 0;
 }
 
 .graph-svg {
@@ -678,8 +683,8 @@ textarea {
 .graph-node {
   position: absolute;
   display: block;
-  width: 220px;
-  min-height: 78px;
+  width: 250px;
+  min-height: 100px;
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 16px;
