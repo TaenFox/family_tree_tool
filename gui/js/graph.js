@@ -70,6 +70,141 @@ function graphEdgePath(fromRect, toRect) {
   return `M ${startX} ${startY} C ${startX} ${startY + controlOffset}, ${endX} ${endY - controlOffset}, ${endX} ${endY}`;
 }
 
+// Ортогональная ломаная со скруглением углов по радиусу.
+// points — массив {x, y}; повороты предполагаются под прямым углом.
+function roundedPolylinePath(points, radius) {
+  const pts = [];
+  points.forEach((point) => {
+    const last = pts[pts.length - 1];
+    if (!last || last.x !== point.x || last.y !== point.y) {
+      pts.push(point);
+    }
+  });
+  if (pts.length < 2) {
+    return "";
+  }
+
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i += 1) {
+    const prev = pts[i - 1];
+    const corner = pts[i];
+    const next = pts[i + 1];
+    const lenIn = Math.hypot(corner.x - prev.x, corner.y - prev.y);
+    const lenOut = Math.hypot(next.x - corner.x, next.y - corner.y);
+    const r = Math.min(radius, lenIn / 2, lenOut / 2);
+    const inX = corner.x - ((corner.x - prev.x) / (lenIn || 1)) * r;
+    const inY = corner.y - ((corner.y - prev.y) / (lenIn || 1)) * r;
+    const outX = corner.x + ((next.x - corner.x) / (lenOut || 1)) * r;
+    const outY = corner.y + ((next.y - corner.y) / (lenOut || 1)) * r;
+    d += ` L ${inX} ${inY} Q ${corner.x} ${corner.y} ${outX} ${outY}`;
+  }
+  const last = pts[pts.length - 1];
+  d += ` L ${last.x} ${last.y}`;
+  return d;
+}
+
+// Группируем рёбра «родитель → ребёнок» в семьи по набору родителей ребёнка.
+// Полукровные дети (разный набор родителей) попадают в разные семьи.
+function buildFamilyGroups(edges, rects) {
+  const childParents = new Map();
+  edges.forEach((edge) => {
+    if (!rects.has(edge.from) || !rects.has(edge.to)) {
+      return;
+    }
+    if (!childParents.has(edge.to)) {
+      childParents.set(edge.to, []);
+    }
+    const parents = childParents.get(edge.to);
+    if (!parents.includes(edge.from)) {
+      parents.push(edge.from);
+    }
+  });
+
+  const families = new Map();
+  childParents.forEach((parents, child) => {
+    const key = [...parents].sort().join("|");
+    if (!families.has(key)) {
+      families.set(key, { parents: [...parents].sort(), children: [] });
+    }
+    families.get(key).children.push(child);
+  });
+  return Array.from(families.values());
+}
+
+// Рёбра общего графа: ортогональные линии со скруглением. Родители сходятся
+// на горизонтальной шине к общему стволу, от него линии расходятся к детям.
+// Одиночная связь (1 родитель → 1 ребёнок) рисуется цельной линией без ствола.
+function buildFamilyEdgesHtml(edges, rects) {
+  const parts = [];
+  const cornerRadius = 4;
+
+  buildFamilyGroups(edges, rects).forEach((family) => {
+    const parentRects = family.parents.map((id) => rects.get(id)).filter(Boolean);
+    const childRects = family.children.map((id) => rects.get(id)).filter(Boolean);
+    if (!parentRects.length || !childRects.length) {
+      return;
+    }
+
+    const parentBottom = Math.max(...parentRects.map((rect) => rect.y + rect.height));
+    const childTop = Math.min(...childRects.map((rect) => rect.y));
+    const junctionX = Math.round(average(parentRects.map((rect) => rect.x + rect.width / 2)));
+
+    const isSingleLink = parentRects.length === 1 && childRects.length === 1;
+
+    // Одна связь: цельная линия без общего узла.
+    if (isSingleLink) {
+      const px = parentRects[0].x + parentRects[0].width / 2;
+      const cx = childRects[0].x + childRects[0].width / 2;
+      const midY = Math.max(parentBottom + 12, Math.round((parentBottom + childTop) / 2));
+      const points = [
+        { x: px, y: parentBottom },
+        { x: px, y: midY },
+        { x: cx, y: midY },
+        { x: cx, y: childRects[0].y },
+      ];
+      parts.push(`<path class="graph-edge" d="${roundedPolylinePath(points, cornerRadius)}"></path>`);
+      return;
+    }
+
+    // Шину родителей держим у родителей, шину детей — у детей, между ними ствол.
+    const busInset = 18;
+    let parentBusY = parentBottom + busInset;
+    let childBusY = childTop - busInset;
+    if (childBusY <= parentBusY) {
+      const mid = Math.round((parentBottom + childTop) / 2);
+      parentBusY = Math.max(parentBottom + 6, mid - 12);
+      childBusY = Math.min(childTop - 6, mid + 12);
+    }
+
+    // Родители: вниз до своей шины, затем по шине к общему узлу.
+    parentRects.forEach((rect) => {
+      const px = rect.x + rect.width / 2;
+      const points = [
+        { x: px, y: parentBottom },
+        { x: px, y: parentBusY },
+        { x: junctionX, y: parentBusY },
+      ];
+      parts.push(`<path class="graph-edge" d="${roundedPolylinePath(points, cornerRadius)}"></path>`);
+    });
+
+    // Ствол между шинами.
+    parts.push(`<path class="graph-edge" d="M ${junctionX} ${parentBusY} L ${junctionX} ${childBusY}"></path>`);
+
+    // Дети: от ствола по своей шине, затем вниз до карточки.
+    childRects.forEach((rect) => {
+      const cx = rect.x + rect.width / 2;
+      const points = [
+        { x: junctionX, y: childBusY },
+        { x: cx, y: childBusY },
+        { x: cx, y: rect.y },
+      ];
+      parts.push(`<path class="graph-edge" d="${roundedPolylinePath(points, cornerRadius)}"></path>`);
+    });
+  });
+
+  return parts.join("");
+}
+
 function average(values) {
   if (!values.length) {
     return null;
@@ -368,8 +503,8 @@ function renderGraph() {
   }
 
   const nodeMap = new Map(graphState.nodes.map((node) => [node.id, node]));
-  const nodeWidth = 220;
-  const nodeHeight = 78;
+  const nodeWidth = 250;
+  const nodeHeight = 100;
   const gap = 28;
   const laneGap = 72;
   const padding = 48;
@@ -399,16 +534,7 @@ function renderGraph() {
       nodesHtml.push(graphNodeMarkup(node, rect));
     }
 
-    const edgesHtml = graphState.edges
-      .map((edge) => {
-        const fromRect = rects.get(edge.from);
-        const toRect = rects.get(edge.to);
-        if (!fromRect || !toRect) {
-          return "";
-        }
-        return `<path class="graph-edge" d="${graphEdgePath(fromRect, toRect)}"></path>`;
-      })
-      .join("");
+    const edgesHtml = buildFamilyEdgesHtml(graphState.edges, rects);
 
     graphCanvas.style.width = `${width}px`;
     graphCanvas.style.height = `${height}px`;

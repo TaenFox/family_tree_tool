@@ -678,8 +678,8 @@ textarea {
 .graph-node {
   position: absolute;
   display: block;
-  width: 220px;
-  min-height: 78px;
+  width: 250px;
+  min-height: 100px;
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 16px;
