@@ -485,7 +485,97 @@ function computeOverviewLayoutDagre(nodes, edges, options) {
   return { positions, laneLabels, width, height };
 }
 
+// Панорамирование (зажатое колесо мыши) и зум графа.
+// Трансформ применяется к #graph-canvas, вьюпорт — .graph-canvas-wrap.
+const graphView = { scale: 1, x: 0, y: 0 };
+let graphViewReady = false;
+const GRAPH_MIN_SCALE = 0.2;
+const GRAPH_MAX_SCALE = 3;
+
+function applyGraphView() {
+  graphCanvas.style.transformOrigin = "0 0";
+  graphCanvas.style.transform = `translate(${graphView.x}px, ${graphView.y}px) scale(${graphView.scale})`;
+}
+
+function resetGraphView() {
+  graphView.scale = 1;
+  graphView.x = 0;
+  graphView.y = 0;
+  applyGraphView();
+}
+
+function setupGraphViewControls() {
+  if (graphViewReady) {
+    return;
+  }
+  const viewport = graphCanvas.parentElement; // .graph-canvas-wrap
+  if (!viewport) {
+    return;
+  }
+  graphViewReady = true;
+
+  viewport.addEventListener(
+    "wheel",
+    (event) => {
+      if (graphCanvas.classList.contains("is-hidden")) {
+        return;
+      }
+      event.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const px = event.clientX - rect.left;
+      const py = event.clientY - rect.top;
+      const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const nextScale = Math.min(GRAPH_MAX_SCALE, Math.max(GRAPH_MIN_SCALE, graphView.scale * factor));
+      const ratio = nextScale / graphView.scale;
+      // держим точку под курсором на месте
+      graphView.x = px - ratio * (px - graphView.x);
+      graphView.y = py - ratio * (py - graphView.y);
+      graphView.scale = nextScale;
+      applyGraphView();
+    },
+    { passive: false },
+  );
+
+  let panning = false;
+  let startX = 0;
+  let startY = 0;
+  let originX = 0;
+  let originY = 0;
+
+  viewport.addEventListener("mousedown", (event) => {
+    if (event.button !== 1 || graphCanvas.classList.contains("is-hidden")) {
+      return;
+    }
+    event.preventDefault(); // гасим авто-скролл среднего колеса
+    panning = true;
+    startX = event.clientX;
+    startY = event.clientY;
+    originX = graphView.x;
+    originY = graphView.y;
+    viewport.classList.add("is-panning");
+  });
+
+  window.addEventListener("mousemove", (event) => {
+    if (!panning) {
+      return;
+    }
+    graphView.x = originX + (event.clientX - startX);
+    graphView.y = originY + (event.clientY - startY);
+    applyGraphView();
+  });
+
+  window.addEventListener("mouseup", (event) => {
+    if (event.button !== 1 || !panning) {
+      return;
+    }
+    panning = false;
+    viewport.classList.remove("is-panning");
+  });
+}
+
 function renderGraph() {
+  setupGraphViewControls();
+
   if (!editingState) {
     if (!graphState || graphState.graph_type !== "overview") {
       graphCanvas.classList.add("is-hidden");
@@ -553,6 +643,7 @@ function renderGraph() {
     `;
     graphEmpty.classList.add("is-hidden");
     graphCanvas.classList.remove("is-hidden");
+    resetGraphView();
     return;
   }
 
@@ -684,6 +775,7 @@ function renderGraph() {
   `;
   graphEmpty.classList.add("is-hidden");
   graphCanvas.classList.remove("is-hidden");
+  resetGraphView();
 }
 
 async function loadGraphForCurrentCard(requestVersion = editorLoadVersion, identity = currentEditorIdentity()) {
