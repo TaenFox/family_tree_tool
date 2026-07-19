@@ -8,7 +8,7 @@ const USE_DAGRE_OVERVIEW = true;
 
 function graphNodeMeta(node) {
   if (node.card_type === "person") {
-    return node.birth_date || "Человек";
+    return node.birth_date || "Н/д";
   }
   return "Группа";
 }

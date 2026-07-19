@@ -5,12 +5,12 @@
 ## Проект
 
 - `family_tree_tool` — локальный GUI для ведения семейной картотеки.
-- `gui_server.py` — локальный HTTP-сервер и API на Python (stdlib, без фреймворков).
-- `gui/` — фронтенд: `index.html`, `styles.css`, `js/` (ванильный JS, модули; граф на dagre).
+- `server/` — пакет локального HTTP-сервера и API на Python (stdlib, без фреймворков); модули разбиты по доменам и подпакетам (`constants`, `textutil`, `parsing`, `navigation`, `graph`, `models/`, `storage/`, `web_server/`).
+- `static/` — фронтенд: `index.html`, `styles.css`, `js/` (ванильный JS, модули; граф на dagre).
 - `template-data/docs/` — шаблон картотеки без личных данных.
 - `config.json` — рабочая конфигурация, в git не хранится (`config.example.json` — пример).
 - Данные — markdown-карточки в `docs/`: `03-people/`, `04-groups/`, `05-places/`, `06-sources/`, `07-research/`.
-- Запуск: `python3 gui_server.py`, интерфейс на `http://127.0.0.1:8765`.
+- Запуск: `python3 -m server`, интерфейс на `http://127.0.0.1:8765`.
 
 ## Token-efficient editing
 
