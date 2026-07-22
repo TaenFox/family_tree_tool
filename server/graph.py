@@ -128,6 +128,9 @@ def graph_overview_payload() -> dict[str, Any]:
     records, details_index = person_graph_details()
     nodes = [build_graph_node(record, "") for record in records.values()]
     edges: set[tuple[str, str, str]] = set()
+    # пары супругов (из раздел «Партнёры»); хранятся отдельно от рёбер
+    # родитель→ребёнок, чтобы не ломать разбор семей и раскладку
+    couples: set[tuple[str, str]] = set()
 
     for directory, details in details_index.items():
         source_id = f"person:{directory}"
@@ -140,6 +143,14 @@ def graph_overview_payload() -> dict[str, Any]:
             parent_id = f"person:{target_directory}"
             edges.add((parent_id, source_id, "parent"))
 
+        for entry in parse_relation_payload(details.partners, "partners"):
+            target_directory = relation_target_directory(entry["value"], source_dir_path, "person")
+            if target_directory is None or target_directory not in records:
+                continue
+            partner_id = f"person:{target_directory}"
+            if partner_id != source_id:
+                couples.add(tuple(sorted((source_id, partner_id))))
+
     normalized_edges = []
     for left, right, kind in sorted(edges):
         normalized_edges.append({"from": left, "to": right, "kind": kind})
@@ -150,4 +161,5 @@ def graph_overview_payload() -> dict[str, Any]:
         "scope": "people",
         "nodes": sorted(nodes, key=lambda item: item["number"]),
         "edges": normalized_edges,
+        "couples": [list(pair) for pair in sorted(couples)],
     }

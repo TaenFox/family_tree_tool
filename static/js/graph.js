@@ -190,15 +190,18 @@ function buildFamilyEdgesHtml(edges, rects) {
     // Ствол между шинами.
     parts.push(`<path class="graph-edge" d="M ${junctionX} ${parentBusY} L ${junctionX} ${childBusY}"></path>`);
 
-    // Дети: от ствола по своей шине, затем вниз до карточки.
+    // Одна общая горизонтальная шина детей (перекрывает ствол), плюс по одному
+    // вертикальному ответвлению к каждому ребёнку — так горизонтальные сегменты
+    // не накладываются друг на друга и линия не «утолщается».
+    const childCenters = childRects.map((rect) => rect.x + rect.width / 2);
+    const busLeft = Math.min(junctionX, ...childCenters);
+    const busRight = Math.max(junctionX, ...childCenters);
+    if (busRight - busLeft > 0.5) {
+      parts.push(`<path class="graph-edge" d="M ${busLeft} ${childBusY} L ${busRight} ${childBusY}"></path>`);
+    }
     childRects.forEach((rect) => {
       const cx = rect.x + rect.width / 2;
-      const points = [
-        { x: junctionX, y: childBusY },
-        { x: cx, y: childBusY },
-        { x: cx, y: rect.y },
-      ];
-      parts.push(`<path class="graph-edge" d="${roundedPolylinePath(points, cornerRadius)}"></path>`);
+      parts.push(`<path class="graph-edge" d="M ${cx} ${childBusY} L ${cx} ${rect.y}"></path>`);
     });
   });
 
@@ -414,9 +417,448 @@ function computeOverviewLayoutLegacy(nodes, edges, { nodeWidth, nodeHeight, gap,
   return { positions, laneLabels, width, height };
 }
 
+// Пере-упорядочивает узлы внутри каждого ряда так, чтобы супруги (со-родители)
+// стояли рядом цепочкой, ориентированной по родителям в ряду сверху. Значения x
+// (слоты dagre) не меняются — узлам лишь переприсваиваются те же слоты в новом
+// порядке, поэтому наложений не возникает, а пересечения рёбер уменьшаются.
+function orderRowsByRelations(positions, edges, nodeIds) {
+  const childParents = new Map();
+  edges.forEach((edge) => {
+    if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) {
+      return;
+    }
+    if (!childParents.has(edge.to)) {
+      childParents.set(edge.to, []);
+    }
+    const arr = childParents.get(edge.to);
+    if (!arr.includes(edge.from)) {
+      arr.push(edge.from);
+    }
+  });
+
+  // граф супругов: со-родители одного ребёнка — соседи
+  const partners = new Map();
+  const addPartner = (a, b) => {
+    if (!partners.has(a)) {
+      partners.set(a, new Set());
+    }
+    partners.get(a).add(b);
+  };
+  childParents.forEach((ps) => {
+    for (let i = 0; i < ps.length; i += 1) {
+      for (let j = i + 1; j < ps.length; j += 1) {
+        addPartner(ps[i], ps[j]);
+        addPartner(ps[j], ps[i]);
+      }
+    }
+  });
+
+  const rows = new Map();
+  positions.forEach((point) => {
+    const key = Math.round(point.y);
+    if (!rows.has(key)) {
+      rows.set(key, []);
+    }
+    rows.get(key).push(point.id);
+  });
+  const rowKeys = Array.from(rows.keys()).sort((left, right) => left - right);
+
+  // ключ ориентации: барицентр родителей (ряды сверху уже пересобраны);
+  // без родителей — текущий x самого узла
+  const memberKey = (id) => {
+    const ps = (childParents.get(id) || []).filter((pid) => positions.has(pid));
+    if (!ps.length) {
+      return positions.get(id).x;
+    }
+    return ps.reduce((sum, pid) => sum + positions.get(pid).x, 0) / ps.length;
+  };
+
+  rowKeys.forEach((rowKey) => {
+    const members = rows.get(rowKey);
+    if (members.length < 2) {
+      return;
+    }
+    const inRow = new Set(members);
+    const adj = new Map(
+      members.map((id) => [id, Array.from(partners.get(id) || []).filter((p) => inRow.has(p))]),
+    );
+
+    // связные компоненты по связям супругов
+    const seen = new Set();
+    const components = [];
+    members.forEach((start) => {
+      if (seen.has(start)) {
+        return;
+      }
+      const comp = [];
+      const stack = [start];
+      seen.add(start);
+      while (stack.length) {
+        const cur = stack.pop();
+        comp.push(cur);
+        adj.get(cur).forEach((nb) => {
+          if (!seen.has(nb)) {
+            seen.add(nb);
+            stack.push(nb);
+          }
+        });
+      }
+      components.push(comp);
+    });
+
+    const linearize = (comp) => {
+      if (comp.length === 1) {
+        return comp;
+      }
+      const degree = (id) => adj.get(id).length;
+      // сложный узел (многожёнство) линейно не разложить — просто по барицентру
+      if (!comp.every((id) => degree(id) <= 2)) {
+        return [...comp].sort((a, b) => memberKey(a) - memberKey(b));
+      }
+      // путь: старт с конца (степень ≤1) с меньшим ключом, идём по цепочке
+      const endpoints = comp.filter((id) => degree(id) <= 1).sort((a, b) => memberKey(a) - memberKey(b));
+      const start = endpoints.length ? endpoints[0] : comp[0];
+      const order = [];
+      const visited = new Set();
+      let cur = start;
+      while (cur !== undefined && !visited.has(cur)) {
+        order.push(cur);
+        visited.add(cur);
+        cur = adj.get(cur).find((nb) => !visited.has(nb));
+      }
+      return order;
+    };
+
+    const ordered = components
+      .map((comp) => ({
+        comp: linearize(comp),
+        key: comp.reduce((sum, id) => sum + memberKey(id), 0) / comp.length,
+      }))
+      .sort((left, right) => left.key - right.key)
+      .flatMap((item) => item.comp);
+
+    // те же слоты x, но в новом порядке
+    const slots = members.map((id) => positions.get(id).x).sort((left, right) => left - right);
+    ordered.forEach((id, index) => {
+      positions.get(id).x = slots[index];
+    });
+  });
+}
+
+// Ставит детей каждой семьи плотным блоком по центру под стыком родителей
+// (junctionX = средний центр родителей, как в buildFamilyEdgesHtml). Двигаем
+// только детей и только если они идут подряд в своём ряду; блок зажат промежутком
+// между соседями по ряду — наложений не возникает. In-place по positions.
+function tightenChildrenUnderParents(positions, edges, nodeIds, { nodeWidth, gap }) {
+  const childParents = new Map();
+  edges.forEach((edge) => {
+    if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) {
+      return;
+    }
+    if (!childParents.has(edge.to)) {
+      childParents.set(edge.to, []);
+    }
+    const parents = childParents.get(edge.to);
+    if (!parents.includes(edge.from)) {
+      parents.push(edge.from);
+    }
+  });
+
+  const families = new Map();
+  childParents.forEach((parents, child) => {
+    const key = [...parents].sort().join("|");
+    if (!families.has(key)) {
+      families.set(key, { parents: [...parents].sort(), children: [] });
+    }
+    families.get(key).children.push(child);
+  });
+
+  // Узлы, у которых есть свои дети («якоря пары»), позиционируются своей парой
+  // над своими детьми (recenter), а не под родителями — их не двигаем, иначе
+  // разорвём брак (напр. Игорь — сын одной пары и муж в другой).
+  const hasChildren = new Set();
+  edges.forEach((edge) => {
+    if (nodeIds.has(edge.from) && nodeIds.has(edge.to)) {
+      hasChildren.add(edge.from);
+    }
+  });
+
+  const rowFor = (id) => Math.round(positions.get(id).y);
+  const buildRow = (rowKey) =>
+    Array.from(positions.values())
+      .filter((point) => Math.round(point.y) === rowKey)
+      .sort((left, right) => left.x - right.x)
+      .map((point) => point.id);
+
+  // по возрастанию junctionX — соседние слева семьи выставляются первыми,
+  // чтобы правые видели корректную левую границу
+  const ordered = Array.from(families.values())
+    .map((family) => {
+      const parentRects = family.parents.map((id) => positions.get(id)).filter(Boolean);
+      const junctionX = parentRects.length
+        ? parentRects.reduce((sum, point) => sum + point.x + nodeWidth / 2, 0) / parentRects.length
+        : 0;
+      return { family, junctionX };
+    })
+    .sort((left, right) => left.junctionX - right.junctionX);
+
+  ordered.forEach(({ family, junctionX }) => {
+    const kids = family.children.filter((id) => positions.has(id) && !hasChildren.has(id));
+    if (!kids.length) {
+      return;
+    }
+    const rowKey = rowFor(kids[0]);
+    if (!kids.every((id) => rowFor(id) === rowKey)) {
+      return; // дети в разных рядах — не трогаем
+    }
+    const row = buildRow(rowKey);
+    const sortedKids = [...kids].sort((a, b) => positions.get(a).x - positions.get(b).x);
+    const indices = sortedKids.map((id) => row.indexOf(id));
+    const contiguous = indices.every((value, i) => i === 0 || value === indices[i - 1] + 1);
+    if (!contiguous) {
+      return; // между детьми стоит чужой узел — блоком не сдвинуть
+    }
+
+    const firstIndex = indices[0];
+    const lastIndex = indices[indices.length - 1];
+    const count = sortedKids.length;
+    const blockWidth = count * nodeWidth + Math.max(0, count - 1) * gap;
+    let leftX = junctionX - blockWidth / 2;
+    const lowerBound = firstIndex > 0 ? positions.get(row[firstIndex - 1]).x + nodeWidth + gap : -Infinity;
+    const upperBound =
+      lastIndex < row.length - 1 ? positions.get(row[lastIndex + 1]).x - gap - blockWidth : Infinity;
+    if (lowerBound > upperBound) {
+      return; // места нет
+    }
+    leftX = Math.max(lowerBound, Math.min(upperBound, leftX));
+    sortedKids.forEach((id, i) => {
+      positions.get(id).x = leftX + i * (nodeWidth + gap);
+    });
+  });
+}
+
+// Сдвигает пары супругов вплотную и центрирует их над детьми (in-place по positions).
+// Правим только пару, если оба супруга: состоят ровно в одной такой семье,
+// лежат в одном ряду и стоят рядом по порядку — иначе оставляем как есть.
+// Сдвиг зажат промежутком между соседями по ряду, поэтому наложений не возникает.
+function recenterCouplesOverChildren(positions, edges, nodeIds, { nodeWidth, nodeHeight, gap }) {
+  const childParents = new Map();
+  edges.forEach((edge) => {
+    if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) {
+      return;
+    }
+    if (!childParents.has(edge.to)) {
+      childParents.set(edge.to, []);
+    }
+    const parents = childParents.get(edge.to);
+    if (!parents.includes(edge.from)) {
+      parents.push(edge.from);
+    }
+  });
+
+  const families = new Map();
+  childParents.forEach((parents, child) => {
+    const key = [...parents].sort().join("|");
+    if (!families.has(key)) {
+      families.set(key, { parents: [...parents].sort(), children: [] });
+    }
+    families.get(key).children.push(child);
+  });
+
+  // сколько раз узел выступает родителем в паре — при повторном браке пару пропускаем
+  const coupleMembership = new Map();
+  families.forEach((family) => {
+    if (family.parents.length === 2) {
+      family.parents.forEach((id) => coupleMembership.set(id, (coupleMembership.get(id) || 0) + 1));
+    }
+  });
+
+  const rowFor = (id) => Math.round(positions.get(id).y);
+  const buildRow = (rowKey) =>
+    Array.from(positions.values())
+      .filter((point) => Math.round(point.y) === rowKey)
+      .sort((left, right) => left.x - right.x)
+      .map((point) => point.id);
+
+  families.forEach((family) => {
+    if (family.parents.length !== 2) {
+      return;
+    }
+    const [first, second] = family.parents;
+    const pointA = positions.get(first);
+    const pointB = positions.get(second);
+    if (!pointA || !pointB) {
+      return;
+    }
+    if (coupleMembership.get(first) > 1 || coupleMembership.get(second) > 1) {
+      return;
+    }
+    if (rowFor(first) !== rowFor(second)) {
+      return;
+    }
+
+    const leftId = pointA.x <= pointB.x ? first : second;
+    const rightId = pointA.x <= pointB.x ? second : first;
+    const row = buildRow(rowFor(first));
+    const leftIndex = row.indexOf(leftId);
+    const rightIndex = row.indexOf(rightId);
+    if (rightIndex !== leftIndex + 1) {
+      return; // между супругами кто-то есть — не трогаем
+    }
+
+    const childCenters = family.children
+      .map((id) => positions.get(id))
+      .filter(Boolean)
+      .map((point) => point.x + nodeWidth / 2);
+    if (!childCenters.length) {
+      return;
+    }
+    const childCenter = (Math.min(...childCenters) + Math.max(...childCenters)) / 2;
+
+    const pairWidth = 2 * nodeWidth + gap;
+    let leftX = childCenter - pairWidth / 2;
+    const lowerBound = leftIndex > 0 ? positions.get(row[leftIndex - 1]).x + nodeWidth + gap : -Infinity;
+    const upperBound =
+      rightIndex < row.length - 1 ? positions.get(row[rightIndex + 1]).x - gap - pairWidth : Infinity;
+    if (lowerBound > upperBound) {
+      return; // места ужать пару нет
+    }
+    leftX = Math.max(lowerBound, Math.min(upperBound, leftX));
+
+    positions.get(leftId).x = leftX;
+    positions.get(rightId).x = leftX + nodeWidth + gap;
+  });
+}
+
+// Ставит «висячего» супруга (без рёбер родитель/ребёнок) рядом с его партнёром
+// в тот же ряд: слева, если там есть место, иначе справа (при необходимости
+// раздвигая ряд). In-place по positions; couples — массив пар [idA, idB].
+function placeFloatingSpouses(positions, couples, edges, nodeIds, { nodeWidth, gap }) {
+  const degree = new Map();
+  edges.forEach((edge) => {
+    if (nodeIds.has(edge.from) && nodeIds.has(edge.to)) {
+      degree.set(edge.from, (degree.get(edge.from) || 0) + 1);
+      degree.set(edge.to, (degree.get(edge.to) || 0) + 1);
+    }
+  });
+  const step = nodeWidth + gap;
+
+  (couples || []).forEach((pair) => {
+    const [a, b] = pair;
+    if (!positions.has(a) || !positions.has(b)) {
+      return;
+    }
+    const da = degree.get(a) || 0;
+    const db = degree.get(b) || 0;
+    let floater;
+    let anchor;
+    if (da === 0 && db > 0) {
+      floater = a;
+      anchor = b;
+    } else if (db === 0 && da > 0) {
+      floater = b;
+      anchor = a;
+    } else {
+      return; // оба связаны (уже размещены семьями) либо оба висячие
+    }
+
+    const anchorPoint = positions.get(anchor);
+    const floatPoint = positions.get(floater);
+    floatPoint.y = anchorPoint.y;
+
+    const rowKey = Math.round(anchorPoint.y);
+    const rowExceptFloater = Array.from(positions.values())
+      .filter((point) => point.id !== floater && Math.round(point.y) === rowKey)
+      .sort((left, right) => left.x - right.x);
+
+    const leftNeighbor = rowExceptFloater.filter((point) => point.x < anchorPoint.x).pop();
+    const leftSlot = anchorPoint.x - step;
+    if (!leftNeighbor || leftNeighbor.x + step <= leftSlot + 0.5) {
+      floatPoint.x = leftSlot;
+      return;
+    }
+
+    const rightSlot = anchorPoint.x + step;
+    const rightNeighbor = rowExceptFloater.find((point) => point.x > anchorPoint.x);
+    if (!rightNeighbor || rightNeighbor.x >= rightSlot + step - 0.5) {
+      floatPoint.x = rightSlot;
+      return;
+    }
+
+    // места нет ни слева, ни справа — раздвигаем всё правее партнёра
+    rowExceptFloater.forEach((point) => {
+      if (point.x > anchorPoint.x) {
+        point.x += step;
+      }
+    });
+    floatPoint.x = rightSlot;
+  });
+}
+
+// Горизонтальная «брачная» линия между супругами БЕЗ общих детей (пары с детьми
+// уже соединены через шину детей). Рисуем только для соседних в одном ряду.
+function buildCoupleEdgesHtml(couples, rects, edges) {
+  if (!couples || !couples.length) {
+    return "";
+  }
+  // ключи пар родителей, у которых есть дети — их пропускаем
+  const childParents = new Map();
+  edges.forEach((edge) => {
+    if (!childParents.has(edge.to)) {
+      childParents.set(edge.to, []);
+    }
+    const parents = childParents.get(edge.to);
+    if (!parents.includes(edge.from)) {
+      parents.push(edge.from);
+    }
+  });
+  const haveChildren = new Set();
+  childParents.forEach((parents) => {
+    if (parents.length === 2) {
+      haveChildren.add([...parents].sort().join("|"));
+    }
+  });
+
+  const parts = [];
+  couples.forEach((pair) => {
+    const [a, b] = pair;
+    if (haveChildren.has([...pair].sort().join("|"))) {
+      return;
+    }
+    const rectA = rects.get(a);
+    const rectB = rects.get(b);
+    if (!rectA || !rectB) {
+      return;
+    }
+    if (Math.round(rectA.y) !== Math.round(rectB.y)) {
+      return; // в разных рядах — соединитель не рисуем
+    }
+    const left = rectA.x <= rectB.x ? rectA : rectB;
+    const right = rectA.x <= rectB.x ? rectB : rectA;
+    const innerGap = right.x - (left.x + left.width);
+    if (innerGap > left.width) {
+      return; // слишком далеко — длинная линия через чужие узлы, пропускаем
+    }
+    // «Скобка» в общем стиле: от низа каждого супруга вниз к общей шине и
+    // соединение по ней (со скруглением углов, как у остальных рёбер).
+    const leftCx = left.x + left.width / 2;
+    const rightCx = right.x + right.width / 2;
+    const bottomY = left.y + left.height;
+    const busY = bottomY + 18;
+    const points = [
+      { x: leftCx, y: bottomY },
+      { x: leftCx, y: busY },
+      { x: rightCx, y: busY },
+      { x: rightCx, y: bottomY },
+    ];
+    parts.push(`<path class="graph-edge graph-edge-couple" d="${roundedPolylinePath(points, 4)}"></path>`);
+  });
+  return parts.join("");
+}
+
 // Новая раскладка через dagre. Наш рендер узлов/рёбер не меняется — dagre отдаёт только координаты.
 function computeOverviewLayoutDagre(nodes, edges, options) {
-  const { nodeWidth, nodeHeight, gap, laneGap, padding } = options;
+  const { nodeWidth, nodeHeight, gap, laneGap, padding, couples = [] } = options;
 
   // Если библиотека почему-то не загрузилась — тихо откатываемся на старую раскладку.
   if (typeof dagre === "undefined" || !dagre.graphlib) {
@@ -442,7 +884,7 @@ function computeOverviewLayoutDagre(nodes, edges, options) {
   dagre.layout(g);
 
   const graphSize = g.graph();
-  const width = Math.max(960, Math.ceil(graphSize.width || 0));
+  let width = Math.max(960, Math.ceil(graphSize.width || 0));
   const height = Math.max(560, Math.ceil(graphSize.height || 0));
   // если холст шире раскладки dagre — центрируем узлы по горизонтали
   const offsetX = Math.max(0, (width - (graphSize.width || 0)) / 2);
@@ -459,6 +901,48 @@ function computeOverviewLayoutDagre(nodes, edges, options) {
       y: laid.y - nodeHeight / 2,
     });
   });
+
+  // dagre упорядочивает узлы в ряду по минимизации пересечений, а не по связям,
+  // поэтому цепочки браков (супруг → общий супруг → следующий супруг) он рвёт.
+  // Пересобираем порядок каждого ряда по со-родительству: супруги встают рядом
+  // цепочкой, ориентированной по родителям сверху. Меняем только порядок —
+  // значения x (слоты dagre) переприсваиваются узлам, наложений не возникает.
+  orderRowsByRelations(positions, edges, nodeIds);
+
+  // dagre держит обоих родителей соединёнными со всеми детьми и разносит их по
+  // краям веера детей (расстояние между супругами = ширина всех детей). Правим
+  // это пост-обработкой: пару супругов сдвигаем вплотную и центрируем над детьми,
+  // не выходя за промежуток между соседями по ряду — поэтому наложений не будет.
+  recenterCouplesOverChildren(positions, edges, nodeIds, { nodeWidth, nodeHeight, gap });
+
+  // После пересборки порядка слоты детей не совпадают со стыком их пары — линии
+  // идут вбок/вкось. Локально ставим детей каждой семьи плотным блоком по центру
+  // под стыком родителей, зажимая промежутком между соседями по ряду (родителей
+  // не трогаем, поэтому пары остаются на месте, наложений не возникает).
+  tightenChildrenUnderParents(positions, edges, nodeIds, { nodeWidth, gap });
+
+  // Супруг без общих детей не имеет рёбер — dagre уносит его в верхний ряд.
+  // Ставим такого «висячего» супруга рядом с его партнёром в тот же ряд.
+  placeFloatingSpouses(positions, couples, edges, nodeIds, { nodeWidth, gap });
+
+  // Нормализация: перемещения выше могли выйти за левый край или расширить
+  // раскладку. Сдвигаем так, чтобы минимум X = padding, и пересчитываем ширину.
+  let minX = Infinity;
+  let maxRight = -Infinity;
+  positions.forEach((point) => {
+    minX = Math.min(minX, point.x);
+    maxRight = Math.max(maxRight, point.x + nodeWidth);
+  });
+  if (Number.isFinite(minX)) {
+    const shift = padding - minX;
+    if (Math.abs(shift) > 0.5) {
+      positions.forEach((point) => {
+        point.x += shift;
+      });
+      maxRight += shift;
+    }
+    width = Math.max(960, Math.ceil(maxRight + padding));
+  }
 
   // Подписи поколений: узлы одного поколения делят одинаковый top. Поколение 0 — там, где К-001.
   const anchorNode = nodes.find((node) => node.number === "К-001") || nodes[0] || null;
@@ -605,7 +1089,14 @@ function renderGraph() {
 
   if (graphState.graph_type === "overview") {
     const overview = USE_DAGRE_OVERVIEW
-      ? computeOverviewLayoutDagre(graphState.nodes, graphState.edges, { nodeWidth, nodeHeight, gap, laneGap, padding })
+      ? computeOverviewLayoutDagre(graphState.nodes, graphState.edges, {
+          nodeWidth,
+          nodeHeight,
+          gap,
+          laneGap,
+          padding,
+          couples: graphState.couples || [],
+        })
       : computeOverviewLayoutLegacy(graphState.nodes, graphState.edges, { nodeWidth, nodeHeight, gap, laneGap, padding });
     overview.positions.forEach((point, id) => positions.set(id, point));
     overview.laneLabels.forEach((label) => laneLabels.push(label));
@@ -624,7 +1115,9 @@ function renderGraph() {
       nodesHtml.push(graphNodeMarkup(node, rect));
     }
 
-    const edgesHtml = buildFamilyEdgesHtml(graphState.edges, rects);
+    const edgesHtml =
+      buildFamilyEdgesHtml(graphState.edges, rects) +
+      buildCoupleEdgesHtml(graphState.couples || [], rects, graphState.edges);
 
     graphCanvas.style.width = `${width}px`;
     graphCanvas.style.height = `${height}px`;
