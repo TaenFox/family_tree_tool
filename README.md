@@ -10,12 +10,22 @@
 - `config.example.json` — пример конфигурации;
 - `config.json` — рабочая конфигурация, в git не хранится.
 
+Требования: Python 3.10 и [pipenv](https://pipenv.pypa.io/).
+
+Установка pipenv (если ещё не установлен):
+
+```bash
+python3 -m pip install --user pipenv
+```
+
 Подготовка:
 
 ```bash
 cp config.example.json config.json
 pipenv install
 ```
+
+`pipenv install` создаёт виртуальное окружение и ставит зависимости проекта из `Pipfile`.
 
 Пример конфигурации по умолчанию использует `./workspace`.
 
